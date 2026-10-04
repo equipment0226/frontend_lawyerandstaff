@@ -6,7 +6,7 @@ import {calculationDecisionLabels,calculationBlockerTitle} from '/shared/legal-l
 import {previewCourtDocument} from './document-preview.js';
 
 const clone=value=>JSON.parse(JSON.stringify(value));
-const stateNames={blocked:'입력·근거 보완 필요',ready_for_review:'변호사 검토 대기',approved:'계산안 확정',stale:'자료 변경 · 재검토',draft:'서식 초안',reviewed:'검토 완료',review_approved:'서식 검토 승인'};
+const stateNames={blocked:'입력·근거 보완 필요',provisional:'가정에 따른 검토용 계산',ready_for_review:'변호사 검토 대기',approved:'계산안 확정',stale:'자료 변경 · 재검토',draft:'서식 초안',reviewed:'검토 완료',review_approved:'서식 검토 승인'};
 const decisionNames=calculationDecisionLabels;
 const checkNames={unsecured_debt_limit:'무담보 채무한도',secured_debt_limit:'담보 채무한도',liquidation_floor:'청산가치 보장',priority_fully_paid:'우선채권 전액 변제',positive_capacity:'월 변제 여력',allocation_conservation:'배분 합계 일치',minimum_repayment:'이의 시 최저변제액',objector_liquidation_floor:'이의 채권자별 청산배당 보장'};
 const safeURL=value=>{try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)?u.href:null;}catch{return null;}};
@@ -16,7 +16,7 @@ const grid=content=>`<div class="field-grid">${content}</div>`;
 const input=(path,title,value,type='number',extra='')=>`<label class="field"><span>${esc(title)}</span><input data-legal-field="${esc(path)}" type="${type}" value="${esc(value??'')}" ${type==='number'?`min="0" ${extra.includes('step=')?'':'step="1"'}`:''} ${extra}></label>`;
 const select=(path,title,value,options)=>`<label class="field"><span>${esc(title)}</span><select data-legal-field="${esc(path)}">${options.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
 const text=(path,title,value)=>`<label class="field"><span>${esc(title)}</span><textarea data-legal-field="${esc(path)}" rows="2">${esc(value||'')}</textarea></label>`;
-const fieldReviewLabel=field=>field.source?.type==='proposed_legal_input'?'법률 판단 제안 · 승인 전':field.status==='semantic_review_required'?'본문 의미 검토 필요':field.status==='source_checked'||field.source?.type==='deterministic_evidence'?'원문 확인 · 의미 검토 필요':'';
+const fieldReviewLabel=field=>field.status==='provisional'||field.source?.type==='provisional_legal_calculation'?'가정에 따른 계산 · 확정 전':field.source?.type==='proposed_legal_input'?'법률 판단 제안 · 승인 전':field.status==='semantic_review_required'?'본문 의미 검토 필요':field.status==='source_checked'||field.source?.type==='deterministic_evidence'?'원문 확인 · 의미 검토 필요':'';
 const fieldReviewHint=field=>fieldReviewLabel(field)?`<p class="small muted" style="margin-top:8px">${esc(fieldReviewLabel(field))}</p>`:'';
 
 function preparationSummary(caseData,documents,draft){
@@ -34,7 +34,7 @@ function preparationSummary(caseData,documents,draft){
   if(ocrReason)pending.push(timedOut?`${factCount?'추출값은 보관되어 있습니다. ':''}원문 대조가 제한 시간을 넘어 검토가 남았습니다.`:'추출한 값의 원문 대조가 아직 완료되지 않았습니다.');
   if(!factCount)pending.push('원문 확인 항목 집계가 아직 없습니다. 추출 진행 상황과 연결된 근거 자료를 확인해 주세요.');
   const proposals=[...list(draft?.proposed_decisions),...current.flatMap(d=>list(d.preview?.proposed_decisions))];
-  if(proposals.length||reasons.some(r=>r.stage==='analysis'))pending.push('생계비·변제액 등 계산과 법률 판단에 보완할 항목이 있습니다. 미확정 계산 칸은 비워 두었습니다.');
+  if(proposals.length||reasons.some(r=>r.stage==='analysis'))pending.push(current.some(d=>d.preview?.calculation_status==='provisional'||list(d.preview?.fields).some(f=>f.source?.type==='provisional_legal_calculation'||f.status==='provisional'))?'생계비·변제액 등은 가정을 명시한 검토용 계산으로 작성했습니다. 가정과 인정 근거를 확인한 뒤 계산을 확정해야 합니다.':'생계비·변제액 등 계산과 법률 판단에 보완할 항목이 있습니다. 계산 근거가 부족한 칸은 비워 두었습니다.');
   if(reasons.some(r=>r.stage==='draft'))pending.push('진술 내용의 검토가 남아 있습니다. 확인된 사실 요약과 경위·인과관계 설명을 함께 살펴보세요.');
   if(current.some(d=>d.ai_review?.passed!==true))pending.push('작성 문서의 AI 대조와 최종 검토가 남아 있습니다. 확인된 값과 검토 완료 여부를 구분해 주세요.');
   const gaps=[...list(draft?.evidence_mapping?.review_gaps),...list(caseData.evidence_mapping?.review_gaps),...current.flatMap(d=>list(d.preview?.review_gaps))];
@@ -60,7 +60,7 @@ export function createLegalTools({getState,render,load,openForm}){
   function ensureInputs(){
     if(local.caseId===current()?.id&&local.inputs)return local.inputs;
     local.caseId=current()?.id;local.sample=false;
-    if(latest()?.inputs){local.inputs=clone(latest().inputs);return local.inputs;}
+    if(latest()?.inputs){local.inputs=clone(latest().inputs);local.inputs.months??=local.schema?.policy?.normal_max_months??36;return local.inputs;}
     const income=candidate('monthly_income'),household=candidate('household_size');
     local.inputs={as_of:seoulDate(),policy_id:local.schema?.policy?.id||'kr-rehab-2026-v1',
       income:{kind:'wage',basis:'net',monthly_amount:income?.value??null,taxes_and_social_insurance:null,business_expenses:0,period:'',evidence_ids:income?.document_id?[income.document_id]:[]},
@@ -71,6 +71,14 @@ export function createLegalTools({getState,render,load,openForm}){
   async function init(){try{local.schema=await api('/legal-calculation/schema');local.error=null;}catch(error){local.error=error.message;}}
   function sources(items){return `<details><summary>적용 기준과 출처 ${list(items).length}개</summary><div class="stack" style="margin-top:12px">${list(items).map(s=>`<div class="small">${sourceLink(s)}<p class="muted">${esc(s.locator||s.description||'')}${s.effective_date?' · 시행 '+esc(s.effective_date):''}</p></div>`).join('')}</div></details>`;}
   function resultView(result){
+    return provisionalNotice(result)+savedResultView(result);
+  }
+  function provisionalNotice(result){
+    if(!result?.provisional)return '';
+    const valueText=(value,field)=>value===null||value===undefined?'미확정':typeof value==='boolean'?(field==='objection'?(value?'이의가 있는 경우까지 검토':'이의 없는 경우의 검토안'):(value?'확인된 것으로 입력':'납부 확인 전')):typeof value==='number'?value.toLocaleString('ko-KR'):({'seoul_median_60':'서울 기준 중위소득 60%','case_specific':'사건별 인정액'}[value]||humanText(value));
+    return `<section class="card" data-provisional-calculation><div class="card-head"><div><h2>${esc(result.inputs?.months??36)}개월 기준 검토용 계산</h2><p class="small muted">소득·채무·재산은 원문에서 가져오고, 아래 가정을 넣어 변제금과 배분표를 계산했습니다.</p></div>${badge('requested','가정 확인 필요')}</div><div class="card-body"><div class="callout orange"><div><strong>생계비·공제·비용 등의 법률 판단이 남아 있습니다.</strong><p>숫자와 요건 충족 표시는 아래 가정이 성립할 때의 결과입니다. 법원 인가나 계산 확정을 뜻하지 않습니다. 기본 변제기간은 36개월이며 별도로 입력한 기간은 유지합니다.</p></div></div><details open style="margin-top:18px"><summary>어떤 가정으로 계산했나요?</summary><div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>항목</th><th>사용한 값</th><th>가정과 확인할 내용</th></tr></thead><tbody>${list(result.assumptions).map(row=>`<tr><td>${esc(row.label||'계산 조건')}</td><td>${esc(valueText(row.value,row.field))}</td><td>${esc(row.reason)}</td></tr>`).join('')}</tbody></table></div></details><p class="small muted" style="margin-top:16px">원문 금액을 바꾸려면 자료 검증에서 해당 값을 수정합니다. 판단 조건은 위 계산 입력에서 수정하고 다시 계산할 수 있습니다. 서류상 가구원 수와 법률상 인정 부양인원은 별도 확인합니다.</p></div></section>`;
+  }
+  function savedResultView(result){
     if(!result)return empty('계산 입력과 근거를 연결해 주세요','소득·생계비·청산가치·채권자별 배분을 같은 입력 버전으로 계산합니다.');
     const s=result.summary||{},status=result.stale?'stale':result.status;
     const metrics=[['월 납입액',s.monthly_deposit],['총 채권자 변제액',s.total_creditor_payment],['청산가치',s.liquidation_value],['변제액 현재가치',s.present_value]];
