@@ -1,6 +1,7 @@
 import {ocrDetail,documentReviewWorkspace,createDocumentReview} from './ocr.js';
 import {renderOffice,clearWorkspace} from '/shared/react-ui.js';
 import {openBatchUpload} from '/shared/upload-batch.js';
+import {createOfficeNavigation} from './navigation.js';
 document.body.dataset.workspace='office';
 import {api,session,authenticate,logout,download} from '/shared/api.js';
 import {createAX} from './ax.js';
@@ -13,13 +14,17 @@ import {createFilingUI} from './filing.js';
 import {esc,money,date,list,label,badge,icon,brand,empty,notify,modal,errorPanel,fields,caseReference,setHtmlPresentation,activityLabel} from '/shared/ui.js';
 
 const state={view:'cases',tab:'overview',cases:[],current:null,registry:null,system:null,legalResults:null,legalQuery:'',legalTarget:'law',query:'',filter:'all',offset:0,total:0,error:null};
+let currentCase=null;
+Object.defineProperty(state,'current',{enumerable:true,get:()=>currentCase,set:value=>{if(value==null||value.id===state.selectedCaseId)currentCase=value;}});
 setHtmlPresentation(html=>officeHtml(html,state));
 const automation=createAutomationUI({getState:()=>state,render,load,openCase,openForm});
-const ax=createAX({getState:()=>state,render,load,openCase,openForm,pipelineView:()=>automation.pipeline(),openDocumentReview:id=>documentReview.open(id),onCaseUnavailable:id=>{clearUnavailableCase(id);render();}});
+const ax=createAX({getState:()=>state,render,load,openCase,openForm,navigate:(patch,options)=>navigation.navigate(patch,options),navigationToken:()=>navigation.current(),isNavigationCurrent:turn=>navigation.isCurrent(turn),rememberNavigation:()=>navigation.remember(),pipelineView:()=>automation.pipeline(),openDocumentReview:id=>documentReview.open(id),onCaseUnavailable:id=>clearUnavailableCase(id)});
 const documentReview=createDocumentReview({getState:()=>state,load,formatValue:ax.factorValue,formatContext:ax.factorContext,formatLocation:ax.factorLocation});
 const legalTools=createLegalTools({getState:()=>state,render,load,openForm});
 const filing=createFilingUI({getState:()=>state,render,load,openForm});
 const tabs=[['overview','사건 개요'],['consultation','상담 기록'],['verify','자료 검증'],['issues','법률 쟁점'],['calculate','법률 계산'],['court_forms','법원 서식'],['bundles','문서·결과'],['corrections','보정 대응'],['messages','고객 연락']];
+const navigation=createOfficeNavigation({getRoute:()=>({...state,caseId:state.selectedCaseId||''}),apply:applyRoute,enabled:()=>Boolean(session.user&&session.token)});
+let loadSequence=0,routeController;
 const roles={staff:'사건 담당 직원',lawyer:'담당 변호사',admin:'운영 관리자'};
 const legal=()=>session.user?.role==='lawyer';
 const cpath=(suffix='')=>`/cases/${encodeURIComponent(state.current.id)}${suffix}`;
@@ -27,21 +32,54 @@ const docName=(id)=>state.current?.documents?.find(d=>d.id===id)?.filename||id;
 const evidenceText=(ids)=>list(ids).map(id=>esc(docName(id))).join(', ')||'연결된 증거 없음';
 const status=(x)=>x.stale?'stale':x.status;
 const statusBadge=(x)=>badge(status(x),({decided:'판단 완료',review_required:'재검토 필요',review_approved:'검토 승인',fulfilled:'충족',requested:'자료 요청',unknown:'미확인',reviewed:'검토 완료'})[status(x)]);
-function go(view,tab){state.view=view;if(tab)state.tab=tab;state.error=null;render();window.scrollTo(0,0);}
-async function ready(){ await load(); await Promise.all([ax.init(),legalTools.init()]); const query=new URLSearchParams(location.search); if(query.get('case')&&!state.current){const tab=tabs.some(([id])=>id===query.get('tab'))?query.get('tab'):'overview';await openCase(query.get('case'),tab);}else render(); }
-function clearUnavailableCase(id){const listed=state.cases.some(row=>row.id===id);state.cases=state.cases.filter(row=>row.id!==id);if(listed)state.total=Math.max(0,state.total-1);state.current=null;state.error=null;state.view='cases';state.tab='overview';state.dashboardSelection=null;state.dashboardHistory=null;state.legalResults=null;state.notificationFeed=null;document.querySelector('#dialog')?.close();const url=new URL(location.href);url.searchParams.delete('case');url.searchParams.delete('tab');history.replaceState({},'',url);}
-async function load(){try{const [result]=await Promise.all([api(`/cases?limit=25&offset=${state.offset}`),automation.refreshNotifications()]);state.cases=list(result.cases||result);state.total=result.total??state.cases.length;if(state.current)state.current=await api(cpath());state.error=null;}catch(error){if(state.current&&[403,404].includes(error.status))clearUnavailableCase(state.current.id);else state.error=error;}render();}
-async function openCase(id,tab='overview'){state.view='case';state.tab=tab;state.error=null;try{state.current=await api('/cases/'+encodeURIComponent(id));render();}catch(error){if([403,404].includes(error.status))clearUnavailableCase(id);else state.error=error;render();}}
+function go(view,tab){return navigation.navigate({view,tab:tab||state.tab,caseId:['case','agent'].includes(view)?state.selectedCaseId||state.current?.id||'':'',detailKind:'',detailId:''});}
+async function ready(){await navigation.start();await Promise.all([ax.init(),legalTools.init()]);render();}
+function clearUnavailableCase(id){
+  if(state.selectedCaseId!==id&&state.current?.id!==id)return;
+  const listed=state.cases.some(row=>row.id===id);state.cases=state.cases.filter(row=>row.id!==id);if(listed)state.total=Math.max(0,state.total-1);
+  state.current=null;state.dashboardSelection=null;state.dashboardHistory=null;state.legalResults=null;state.notificationFeed=null;
+  return navigation.navigate({view:'cases',caseId:'',tab:'overview',detailKind:'',detailId:''},{replace:true});
+}
+async function applyRoute(route,turn){
+  routeController?.abort();routeController=new AbortController();const signal=routeController.signal;
+  const oldCase=state.current?.id;
+  Object.assign(state,route,{selectedCaseId:route.caseId,error:null,loading:true});
+  if(oldCase!==route.caseId)state.current=null;
+  state.dashboardRouteDetail=route.detailKind?{kind:route.detailKind,id:route.detailId}:null;
+  state.dashboardSelection=null;state.dashboardHistory=null;
+  ax.restoreNavigation?.(route);
+  render();
+  const valid=()=>navigation.isCurrent(turn)&&Boolean(session.token);
+  const jobs=[api(`/cases?limit=25&offset=${route.offset}`,{signal}).then(result=>{if(valid()){state.cases=list(result.cases||result);state.total=result.total??state.cases.length;}}),automation.refreshNotifications()];
+  if(route.caseId)jobs.push(api('/cases/'+encodeURIComponent(route.caseId),{signal}).then(value=>{if(valid())state.current=value;}).catch(error=>{if(valid()&&[403,404].includes(error.status))return clearUnavailableCase(route.caseId);throw error;}));
+  if(route.view==='registry')jobs.push(registry(),...(route.legalQuery?[api('/legal/search?q='+encodeURIComponent(route.legalQuery)+'&target='+encodeURIComponent(route.legalTarget),{signal}).then(result=>{if(valid())state.legalResults=result;})]:[]));
+  if(route.view==='system')jobs.push(api('/system',{signal}).then(result=>{if(valid())state.system=result;}));
+  if(route.view==='knowledge')jobs.push(ax.loadKnowledge(),registry(),ax.restoreKnowledgeSearch?.(route,valid));
+  const results=await Promise.allSettled(jobs);
+  if(!valid())return;
+  state.error=results.find(result=>result.status==='rejected')?.reason||null;state.loading=false;render();
+}
+async function load(){
+  const turn=navigation.current(),sequence=++loadSequence,id=state.selectedCaseId,offset=state.offset;
+  const valid=()=>navigation.isCurrent(turn)&&sequence===loadSequence&&Boolean(session.token);
+  try{
+    const [result,,current]=await Promise.all([api(`/cases?limit=25&offset=${offset}`),automation.refreshNotifications(),id?api('/cases/'+encodeURIComponent(id)).catch(error=>{error.caseLookup=true;throw error;}):null]);
+    if(!valid())return;state.cases=list(result.cases||result);state.total=result.total??state.cases.length;
+    if(id===state.selectedCaseId)state.current=current;state.error=null;
+  }catch(error){if(!valid())return;if(id&&error.caseLookup&&[403,404].includes(error.status)){await clearUnavailableCase(id);return;}state.error=error;}
+  if(valid())render();
+}
+function openCase(id,tab='overview'){return navigation.navigate({view:'case',caseId:id,tab,detailKind:'',detailId:''});}
 async function registry(){if(!state.registry)state.registry=await api('/registry');return state.registry;}
 function render(){
   const user=session.user;if(!user)return;
-  const names={cases:'사건 목록',case:state.current?.client_name+'님 사건',registry:'법원·발급처',knowledge:'수집 지식함',agent:'AI 검토 작업실',system:'운영 현황'};
+  const names={cases:'사건 목록',case:state.current?state.current.client_name+'님 사건':'사건 확인',registry:'법원·발급처',knowledge:'수집 지식함',agent:'AI 검토 작업실',system:'운영 현황'};
   const currentName=names[state.view]||'업무공간';
   renderOffice({state,user,currentName,api,contentHtml:officeHtml(state.error?errorPanel(state.error):view(),state),alarmHtml:automation.alarm(null,true),roleLabel:roles[user.role]||user.role});
   automation.checkAlerts();
 }
 function nav(id,i,title,count){return `<button class="nav-link ${state.view===id?'active':''}" data-nav="${id}">${icon(i)}${title}${count!=null?`<span class="nav-count">${count}</span>`:''}</button>`;}
-function view(){if(state.view==='cases')return casesView();if(state.view==='case')return state.current?caseView():empty('사건을 선택해 주세요','전체 사건에서 진행할 사건을 선택하세요.');if(state.view==='registry')return registryView();if(state.view==='agent')return ax.agentView();if(state.view==='knowledge')return ax.knowledgeView();if(state.view==='system')return systemView();return '';}
+function view(){if(state.view==='cases')return casesView();if(state.view==='case')return state.current?caseView():state.loading?'<div class="loading" role="status"><span class="spinner"></span><p>사건 자료를 확인하고 있습니다.</p></div>':empty('사건을 선택해 주세요','전체 사건에서 진행할 사건을 선택하세요.');if(state.view==='registry')return registryView();if(state.view==='agent')return ax.agentView();if(state.view==='knowledge')return ax.knowledgeView();if(state.view==='system')return systemView();return '';}
 function casesView(){
   const cs=state.cases;const pending=cs.reduce((s,c)=>s+(c.blocker_count??list(c.blockers).length),0);const corrections=cs.reduce((s,c)=>s+(c.correction_count??list(c.corrections).filter(x=>x.status!=='approved').length),0);
   const cards=[['전체 담당 사건',state.total,'전체 사건 수','folder'],['확인이 필요한 항목',pending,'현재 목록 · 자료·사실·법률 판단','check'],['보정 대응',corrections,'현재 목록 · 회차별 충족 확인','clock'],['검토 담당',legal()?'변호사':'직원','사건별 권한으로 처리','shield']];
@@ -86,10 +124,10 @@ async function saveConsultation(data){
 }
 const actions={
   'consultation-request':()=>openForm('세부 상담 요청',`<p class="small muted">고객 포털의 메시지와 알림으로 전달됩니다. 확인할 내용과 상담 방법을 정리해 주세요.</p>${fields([['message','고객에게 보낼 상담 안내','textarea',defaultConsultationRequest,true]])}`,'세부 상담 요청 보내기',async body=>{if(body.message.trim().length<10||body.message.length>4000)throw new Error('상담 안내를 10자 이상 4,000자 이하로 작성해 주세요.');await mutate('/consultation/request',body,'세부 상담을 요청했습니다. 고객 답변이나 통화 내용을 기록해 주세요.');}),
-  'page-prev':async()=>{state.offset=Math.max(0,state.offset-25);state.query='';state.filter='all';await load();},
-  'page-next':async()=>{state.offset+=25;state.query='';state.filter='all';await load();},
+  'page-prev':()=>navigation.navigate({offset:Math.max(0,state.offset-25),query:'',filter:'all'}),
+  'page-next':()=>navigation.navigate({offset:state.offset+25,query:'',filter:'all'}),
   menu:()=>document.querySelector('.sidebar').classList.toggle('open'),
-  logout:async()=>{clearWorkspace();await logout();authenticate('office',ready);},
+  logout:async()=>{navigation.stop();routeController?.abort();state.current=null;state.cases=[];clearWorkspace();await logout();authenticate('office',ready);},
   refresh:async()=>{if(state.view==='system')state.system=await api('/system');if(state.view==='registry')state.registry=await api('/registry');if(state.view==='knowledge')await ax.loadKnowledge();await load();},
   'new-case':async()=>{const r=await registry();openForm('새 사건 등록',fields([['client_name','의뢰인 이름','text','',true]])+`<label class="field"><span>검토할 법원</span><select name="court_id" required>${list(r.courts).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label>`+fields([['summary','상담 요약','textarea','',true]])+'<label class="row small"><input name="consent" type="checkbox" required> 의뢰인의 사건 기록 작성 동의를 확인했습니다.</label>','사건 등록',async body=>{const c=await api('/cases',{method:'POST',body:{client_name:body.client_name,court_id:body.court_id,summary:body.summary,consent:true}});await load();await openCase((c.case||c).id);notify('사건을 등록했습니다.');});},
   upload:()=>openBatchUpload({caseData:state.current,role:'staff',isCurrent:()=>Boolean(session.token)&&session.user?.role!=='client',onComplete:async updated=>{state.current=updated;await load();}}),
@@ -109,18 +147,19 @@ const actions={
   'approve-correction':d=>openForm('보정 항목 검토 승인 H-C',fields([['reason','원문 요구 충족 확인과 승인 이유','textarea','',true]]),'H-C 승인 기록',body=>mutate('/corrections/'+encodeURIComponent(d.id)+'/approve',body,'보정 항목의 검토 승인을 기록했습니다.')),
   workflow:()=>openForm('사건 업무 상태 변경',`<label class="field"><span>다음 업무 상태</span><select name="stage">${['자료 수집','검증 중','보정 대응','검토 보류'].map(s=>`<option ${state.current.stage===s?'selected':''}>${s}</option>`).join('')}</select></label>`+fields([['reason','상태 변경 이유와 다음 조치','textarea','',true]]),'업무 상태 저장',body=>mutate('/workflow',body,'사건 업무 상태와 변경 사유를 기록했습니다.')),
   'confirm-deadline':d=>openForm('송달 근거와 기한 확인',fields([['due_date','원문으로 확인한 기한','date','',true]])+docSelect('evidence_id','검증 완료된 송달·기한 근거')+fields([['reason','기한 산정 및 원문 대조 이유','textarea','',true]]),'기한 확정',body=>mutate('/deadlines/'+encodeURIComponent(d.id)+'/confirm',body,'기한과 확인 근거를 기록했습니다.')),
-  submission:()=>{state.tab='bundles';render();},
+  submission:()=>go('case','bundles'),
   'run-agent':d=>consultationPending(state.current)?go('case','consultation'):ax.start(d.kind),
   requirements:async()=>{const data=await api('/requirements');modal('요구조건과 구현 범위',structuredHtml(data));},
   'sample-bundle':()=>download('/testing/sample-bundle'+(state.current?.id?'?case_id='+encodeURIComponent(state.current.id):''),'새출발_연습자료.zip'),
   prompts:async()=>{const data=await api('/prompts');modal('AI 프롬프트 · 버전과 실행 위치',`<p class="small muted">apps/api/prompts/의 파일이 실제 모델 호출에 사용됩니다. 서류 규칙·계산 산식은 별도 코드로 실행됩니다.</p>${data.prompts.map(p=>`<details class="section-spacer"><summary>${esc(p.title)} · ${esc(p.id)} · v${esc(p.version)}</summary><p class="small muted">${esc(p.path)}<br>호출: ${esc(p.caller)}<br>SHA-256: ${esc(p.sha256)}</p><pre class="code-block">${esc(p.text)}</pre></details>`).join('')}`);},
   'ocr-detail':d=>{const doc=state.current.documents.find(x=>x.id===d.id);modal('스캔 OCR · 쪽별 판독 근거',ocrDetail(doc));}
 };
-document.addEventListener('click',async e=>{const nav=e.target.closest('[data-nav]');const tab=e.target.closest('[data-tab]');const row=e.target.closest('[data-case]');const action=e.target.closest('[data-action]');try{if(nav){go(nav.dataset.nav);if(state.view==='registry'){await registry();render();}if(state.view==='system'){state.system=await api('/system');render();}if(state.view==='knowledge'){await Promise.all([ax.loadKnowledge(),registry()]);ax.repaint();}return;}if(tab){state.tab=tab.dataset.tab;if(state.current)state.view='case';render();return;}if(row&&!action){await openCase(row.dataset.case);return;}if(action){const fn=actions[action.dataset.action]||automation.actions[action.dataset.action]||ax.actions[action.dataset.action]||legalTools.actions[action.dataset.action]||filing.actions[action.dataset.action];if(fn){action.disabled=true;await fn(action.dataset);action.disabled=false;}}}catch(error){notify(error.message,'error');if(action)action.disabled=false;}});
+document.addEventListener('click',async e=>{const nav=e.target.closest('[data-nav]');const tab=e.target.closest('[data-tab]');const row=e.target.closest('[data-case]');const action=e.target.closest('[data-action]');try{if(nav){await go(nav.dataset.nav);return;}if(tab){if(state.selectedCaseId)await go('case',tab.dataset.tab);return;}if(row&&!action){await openCase(row.dataset.case);return;}if(action){const fn=actions[action.dataset.action]||automation.actions[action.dataset.action]||ax.actions[action.dataset.action]||legalTools.actions[action.dataset.action]||filing.actions[action.dataset.action];if(fn){action.disabled=true;await fn(action.dataset);action.disabled=false;}}}catch(error){notify(error.message,'error');if(action)action.disabled=false;}});
 document.addEventListener('toggle',e=>{if(e.target.isConnected&&e.target.matches?.('.case-dashboard-history'))state.dashboardHistory={caseId:state.current?.id,open:e.target.open};},true);
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('tr[data-case]'))openCase(e.target.dataset.case);});
-document.addEventListener('input',e=>{if(e.target.id==='case-search'){state.query=e.target.value;document.querySelector('#cases-table').innerHTML=casesTable();}});
-document.addEventListener('change',async e=>{if(e.target.id==='case-filter'){state.filter=e.target.value;document.querySelector('#cases-table').innerHTML=casesTable();}if(e.target.id==='agent-case'&&e.target.value){try{state.current=await api('/cases/'+encodeURIComponent(e.target.value));render();}catch(error){notify(error.message,'error');}}});
-document.addEventListener('submit',async e=>{if(!['calculate-form','message-form','consultation-form','legal-search-form'].includes(e.target.id))return;e.preventDefault();const btn=e.target.querySelector('[type=submit]');btn.disabled=true;try{const data=Object.fromEntries(new FormData(e.target));if(e.target.id==='legal-search-form'){state.legalQuery=data.q;state.legalTarget=data.target;state.legalResults=await api('/legal/search?q='+encodeURIComponent(data.q)+'&target='+encodeURIComponent(data.target));render();}else if(e.target.id==='consultation-form'){await saveConsultation(data);}else if(e.target.id==='calculate-form'){await mutate('/calculate',{mode:'scenario',...Object.fromEntries(Object.entries(data).map(([k,v])=>[k,Number(v)]))},'가정 현금흐름을 계산했습니다.');}else{await mutate('/messages',data,'고객 포털에 메시지를 전달했습니다.');}}catch(error){notify(error.message,'error');}finally{btn.disabled=false;}});
-window.addEventListener('session-expired',()=>{clearWorkspace();authenticate('office',ready);});
+document.addEventListener('input',e=>{if(e.target.id==='case-search'){state.query=e.target.value;document.querySelector('#cases-table').innerHTML=casesTable();navigation.remember();}});
+document.addEventListener('change',async e=>{if(e.target.id==='case-filter'){state.filter=e.target.value;document.querySelector('#cases-table').innerHTML=casesTable();navigation.remember();}if(e.target.id==='agent-case'&&e.target.value)await navigation.navigate({view:'agent',caseId:e.target.value});});
+document.addEventListener('submit',async e=>{if(!['calculate-form','message-form','consultation-form','legal-search-form'].includes(e.target.id))return;e.preventDefault();const btn=e.target.querySelector('[type=submit]');btn.disabled=true;try{const data=Object.fromEntries(new FormData(e.target));if(e.target.id==='legal-search-form'){await navigation.navigate({legalQuery:data.q,legalTarget:data.target});}else if(e.target.id==='consultation-form'){await saveConsultation(data);}else if(e.target.id==='calculate-form'){await mutate('/calculate',{mode:'scenario',...Object.fromEntries(Object.entries(data).map(([k,v])=>[k,Number(v)]))},'가정 현금흐름을 계산했습니다.');}else{await mutate('/messages',data,'고객 포털에 메시지를 전달했습니다.');}}catch(error){notify(error.message,'error');}finally{btn.disabled=false;}});
+window.addEventListener('office:dashboard-detail',event=>{const selection=event.detail?.selection;if(selection)void navigation.navigate({detailKind:selection.kind,detailId:selection.id||''},{keepScroll:true});else navigation.closeDetail();});
+window.addEventListener('session-expired',()=>{navigation.stop();routeController?.abort();state.current=null;state.cases=[];clearWorkspace();authenticate('office',ready);});
 authenticate('office',ready);

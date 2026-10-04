@@ -32,7 +32,7 @@ function Details({selection,close,c,a}){
   useEffect(()=>{const el=dialog.current;if(selection&&el&&!el.open)el.showModal();return()=>{if(el?.open)el.close();};},[selection]);
   if(!selection)return null;
   const titles={source:'자료에서 확인한 항목',rules:'적용 법률 기준',risks:'위험과 확인할 판단',approval:'인가 가능성의 근거',action:'검토 항목 상세',actions:'검토 항목 전체',knowledge:'연결된 법령·판례',deadlines:'확인할 기한'};
-  return <dialog ref={dialog} className="cd-dialog" aria-labelledby="cd-detail-title" onCancel={e=>{e.preventDefault();close();}} onClick={e=>{if(e.target===e.currentTarget||e.target.closest('[data-tab],[data-nav],[data-action]'))close();}}><div className="cd-dialog-head"><div><span className="cd-overline">검토 근거</span><h2 id="cd-detail-title">{titles[kind]||'사건 상세'}</h2></div><button className="cd-close" aria-label="상세 닫기" onClick={close}><Icon name="close"/></button></div><div className="cd-dialog-body">
+  return <dialog ref={dialog} className="cd-dialog" aria-labelledby="cd-detail-title" onCancel={e=>{e.preventDefault();close();}} onClick={e=>{if(e.target===e.currentTarget)close();}}><div className="cd-dialog-head"><div><span className="cd-overline">검토 근거</span><h2 id="cd-detail-title">{titles[kind]||'사건 상세'}</h2></div><button className="cd-close" aria-label="상세 닫기" onClick={close}><Icon name="close"/></button></div><div className="cd-dialog-body">
     {kind==='source'&&<><p>공식 서식에 필요한 자료 항목을 기준으로 셉니다. 서류 검토 완료와 모든 법률 판단의 완료는 별개입니다.</p>{list(a.forms).length?list(a.forms).map((form,index)=><details className="cd-form-detail" key={index} open={index===0}><summary>{text(form.title)||'작성 서식'}<span>{count(form.covered)} / {count(form.total)} 확인</span></summary>{list(form.fields).map((field,n)=><div className="cd-detail-row" key={n}><div><strong>{text(field.label)||'확인 항목'}</strong><small>{({source:'원문 근거',legal:'법률 판단',formal:'작성·서명 사항'})[field.category]||'근거 확인'}</small></div><span className={`cd-tag ${field.status==='covered'?'green':'sand'}`}>{statusNames[field.status]||'확인 대기'}</span><LinkButton tab={field.target?.tab||'verify'}>확인</LinkButton></div>)}</details>):<Empty>필수 항목별 평가를 아직 준비하지 못했습니다. 받은 서류에서 원문과 추출 내용을 확인할 수 있습니다.</Empty>}<LinkButton tab="verify">자료 추출·검토 열기</LinkButton></>}
     {kind==='rules'&&<><p>확인된 기준, 충족하지 못한 기준, 아직 판단하지 않은 기준을 나누어 표시합니다. 기준 확인율은 인가 확률이 아닙니다.</p>{list(a.rules).length?list(a.rules).map((rule,index)=><article className="cd-detail-article" key={index}><span className={`cd-tag ${rule.status==='met'?'green':rule.status==='unmet'?'red':'sand'}`}>{statusNames[rule.status]||'판단 대기'}</span><h3>{text(rule.title)||'법률 검토 기준'}</h3><p>{text(rule.summary)}</p>{(rule.actual!==undefined&&rule.actual!==null)&&<p className="cd-evidence-value">확인한 값 · {text(typeof rule.actual==='object'?rule.actual:String(rule.actual))}{text(rule.unit)}</p>}<SourceLinks sources={refs(rule)}/><LinkButton tab={rule.target?.tab||'issues'}>판단과 근거 확인</LinkButton></article>):<Empty>상담과 자료 확인 이후 적용 기준을 평가합니다. 아직 평가하지 않은 기준을 충족한 것으로 표시하지 않습니다.</Empty>}</>}
     {kind==='risks'&&<><p>확인된 위험과 정보 부족으로 남은 판단을 구분합니다.</p><div className="cd-risk-summary"><strong>확인된 위험 <b>{number(a.metrics?.risks?.confirmed)??'—'}</b></strong><strong>판단 대기 <b>{number(a.metrics?.risks?.pending)??'—'}</b></strong></div>{list(a.rules).filter(r=>['unmet','unknown'].includes(r.status)).map((rule,index)=><article className="cd-detail-article" key={index}><span className="cd-tag sand">{statusNames[rule.status]}</span><h3>{text(rule.title)}</h3><p>{text(rule.summary)}</p><SourceLinks sources={refs(rule)}/><LinkButton tab={rule.target?.tab||'issues'}>확인하기</LinkButton></article>)}{!list(a.rules).some(r=>['unmet','unknown'].includes(r.status))&&<Empty>상세 위험은 적용 법률 기준과 담당자의 판단이 기록되면 표시됩니다.</Empty>}<LinkButton tab="issues">법률 쟁점 전체 보기</LinkButton></>}
@@ -42,6 +42,29 @@ function Details({selection,close,c,a}){
     {kind==='knowledge'&&<>{list(item?[item]:a.knowledge?.matches).length?list(item?[item]:a.knowledge?.matches).map((match,index)=><article className="cd-detail-article" key={index}><span className="cd-tag green">{({case:'판례',court_rule:'법원 기준',statute:'법령'})[match.kind]||'공식 근거'}</span><h3>{text(match.title||match.source?.title)}</h3><p>{text(match.summary)}</p>{text(match.court_scope)&&<p className="cd-scope">적용 범위 · {courtScope(match.court_scope,c)}</p>}{(match.decision_stage||match.outcome)&&<p className="cd-scope">{decisionStage(match.decision_stage)}{match.outcome?" · "+outcomeLabel(match.outcome):""}</p>}{list(match.limits).map((limit,n)=><p className="cd-limit" key={n}>{text(limit)}</p>)}{list(match.required_evidence).length>0&&<><h4>적용을 위해 확인할 자료</h4><ul>{match.required_evidence.map((value,n)=><li key={n}>{text(value)}</li>)}</ul></>}{match.source?.excerpt&&<blockquote>{text(match.source.excerpt)}</blockquote>}<SourceLinks sources={[match.source].filter(Boolean)}/></article>):<Empty>이 사건과 연결된 공식 원문을 아직 확인하지 못했습니다. 근거가 확보되면 적용 범위와 함께 표시합니다.</Empty>}<button className="cd-link" data-nav="knowledge">수집 지식함 열기<Icon name="arrow"/></button></>}
     {kind==='deadlines'&&<>{list(c.deadlines).length?c.deadlines.map((deadline,index)=><article className="cd-detail-article" key={index}><h3>{text(deadline.title)||'확인할 기한'}</h3><p>{deadline.due_date?date(deadline.due_date):'송달 근거를 확인한 뒤 기한을 확정해 주세요.'}</p><button className="cd-link" data-action="confirm-deadline" data-id={deadline.id}>근거와 기한 확인<Icon name="arrow"/></button></article>):<Empty>등록된 기한이 없습니다.</Empty>}</>}
   </div><div className="cd-dialog-foot"><button className="button secondary" onClick={close}>닫기</button></div></dialog>;
+}
+
+// URLs describe a view, never an assessment payload or a customer's form input.
+// Resolve IDs against the current case so Back cannot revive stale findings.
+export function dashboardSelectionDescriptor(c,selection){
+  if(!selection)return null;
+  const {kind,item}=selection,a=c.case_assessment||{};
+  if(kind==='actions')return {kind,id:item?.category||'documents'};
+  const rows=kind==='action'?list(a.actions):kind==='knowledge'?list(a.knowledge?.matches):[];
+  const index=rows.indexOf(item);
+  return {kind,id:item?String(item.id||`row-${index}`):''};
+}
+export function resolveDashboardSelection(c,descriptor){
+  if(!descriptor)return null;
+  const {kind,id}=descriptor,a=c.case_assessment||{};
+  if(!['source','rules','risks','approval','action','actions','knowledge','deadlines'].includes(kind))return null;
+  if(kind==='actions')return Object.hasOwn(categoryNames,id)?{kind,item:{category:id}}:null;
+  if(kind==='action'||(kind==='knowledge'&&id)){
+    const rows=kind==='action'?list(a.actions):list(a.knowledge?.matches);
+    const item=rows.find((row,index)=>String(row.id||`row-${index}`)===id);
+    return item?{kind,item}:null;
+  }
+  return {kind,item:null};
 }
 
 export default function CaseDashboard({caseData:c,initialSelection,onSelection}){

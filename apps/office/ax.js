@@ -39,16 +39,27 @@ export function createAX(context){
     catch(error){local.knowledgeError=error.message;}
   }
   async function loadRulebook(){try{local.rulebook=await api('/rulebook');}catch(error){local.rulebookError=error.message;}}
+  function restoreNavigation(route){
+    if(local.query!==route.knowledgeQuery||local.court!==route.knowledgeCourt)local.results=null;
+    local.knowledgeTab=route.knowledgeTab||'sources';local.query=route.knowledgeQuery||'';local.court=route.knowledgeCourt||'';local.searching=false;
+  }
+  async function restoreKnowledgeSearch(route,valid){
+    if(!route.knowledgeQuery)return;
+    const result=await api('/knowledge/search?q='+encodeURIComponent(route.knowledgeQuery)+(route.knowledgeCourt?'&court_id='+encodeURIComponent(route.knowledgeCourt):''));
+    if(valid()){local.results=result;local.searching=false;}
+  }
   async function init(){await Promise.all([loadKnowledge().then(repaint),loadRulebook()]);repaint();if(!local.timer)local.timer=setInterval(poll,4500);}
   async function poll(){
     if(local.polling||!session.user||document.hidden)return;
     local.polling=true;
     try{
-      const state=getState();let changed=false;
+      const state=getState(),turn=context.navigationToken?.();let changed=false;
+      const sameNavigation=()=>!context.isNavigationCurrent||context.isNavigationCurrent(turn);
       if(current()&&['case','agent'].includes(state.view)){
         const caseId=current().id;
         let fresh;
-        try{fresh=await api('/cases/'+encodeURIComponent(caseId));}catch(error){if([403,404].includes(error.status)&&current()?.id===caseId){context.onCaseUnavailable?.(caseId);return;}throw error;}
+        try{fresh=await api('/cases/'+encodeURIComponent(caseId));}catch(error){if([403,404].includes(error.status)&&sameNavigation()&&current()?.id===caseId){context.onCaseUnavailable?.(caseId);return;}throw error;}
+        if(!sameNavigation())return;
         if(current()?.id===caseId&&JSON.stringify(current())!==JSON.stringify(fresh)){
           // Keep the version the user started editing; the API must detect a
           // conflicting update instead of silently saving against a newer one.
@@ -56,14 +67,15 @@ export function createAX(context){
         }
       }
       if(state.view==='cases'&&++local.pollTick%2===0){
-        const result=await api(`/cases?limit=25&offset=${state.offset}`);
+        const offset=state.offset,result=await api(`/cases?limit=25&offset=${offset}`);
+        if(!sameNavigation()||state.view!=='cases'||state.offset!==offset)return;
         const cases=list(result.cases||result);
         if(JSON.stringify(cases)!==JSON.stringify(state.cases)){state.cases=cases;state.total=result.total??cases.length;changed=true;}
       }
       if(local.intake&&active(local.intake)){
         local.intake=await api('/intake-runs/'+encodeURIComponent(local.intake.id||local.intake.run_id));changed=true;
         const caseId=local.intake.result?.case_id||local.intake.case_id;
-        if(!active(local.intake)&&caseId){notify('상담 분석과 첫 검토본이 준비되었습니다. 확인할 항목을 검토하세요.');const waiting=state.view==='cases';await load();if(waiting)await openCase(caseId);}
+        if(!active(local.intake)&&caseId){notify('상담 분석과 첫 검토본이 준비되었습니다. 확인할 항목을 검토하세요.');const waiting=state.view==='cases';await load();if(waiting&&sameNavigation())await openCase(caseId);}
       }
       if(local.ingestion&&active(local.ingestion)){
         local.ingestion=await api('/knowledge/runs/'+encodeURIComponent(local.ingestion.id||local.ingestion.run_id));changed=true;
@@ -250,10 +262,11 @@ export function createAX(context){
   }
   async function start(kind){
     if(consultationPending(current())){await openCase(current().id,'consultation');return;}
+    const turn=context.navigationToken?.(),caseId=current().id;
     const response=await api(cpath('/ax-runs'),{method:'POST',body:{kind,expected_version:current().version}});
     notify('사건 근거를 검색하고 검토를 시작했습니다. 실제 결과가 준비되면 표시합니다.');
     await load();
-    if(getState().view==='case')getState().tab='overview';render();
+    if((!context.isNavigationCurrent||context.isNavigationCurrent(turn))&&getState().view==='case'&&current()?.id===caseId)await openCase(caseId,'overview');
     return response;
   }
   function findFinding(data){const run=allRuns().find(r=>r.id===data.run);const finding=list(run?.findings).find(f=>f.id===data.id);if(!finding)throw new Error('검토 항목을 다시 불러와 주세요.');return {run,finding};}
@@ -281,7 +294,7 @@ export function createAX(context){
       if(el?.dataset.sourceId===data.id)el.querySelector('.dialog-body').innerHTML=`<div class="loading" role="status"><span class="spinner"></span><p>이 출처의 공식 본문을 수집하고 있습니다. 완료되면 저장된 내용을 표시합니다.</p></div>`;
       notify('선택한 출처의 본문 수집을 요청했습니다.');
     },
-    'ax-knowledge-tab':async data=>{local.knowledgeTab=data.tabid;if(data.tabid==='rules'&&!local.rulebook)await loadRulebook();render();},
+    'ax-knowledge-tab':async data=>{if(data.tabid==='rules'&&!local.rulebook)await loadRulebook();if(context.navigate)await context.navigate({knowledgeTab:data.tabid});else{local.knowledgeTab=data.tabid;render();}},
     'ax-apply':data=>reviewFinding(data,true),
     'ax-dismiss':data=>reviewFinding(data,false),
     'ax-reload-knowledge':async()=>{await loadKnowledge();render();},
@@ -309,10 +322,9 @@ export function createAX(context){
         local.intake=file?.size?await api('/intake-runs/upload',{method:'POST',body:data}):await api('/intake-runs',{method:'POST',body:{text}});
         local.intakeText='';notify('상담 회의록을 받았습니다. 실제 분석 상태를 표시합니다.');render();
       }else{
-        local.query=String(data.get('q')||'');local.court=String(data.get('court_id')||'');local.searching=true;
-        local.results=await api('/knowledge/search?q='+encodeURIComponent(local.query)+(local.court?'&court_id='+encodeURIComponent(local.court):''));local.searching=false;render();
+        await context.navigate({knowledgeQuery:String(data.get('q')||''),knowledgeCourt:String(data.get('court_id')||'')});
       }
     }catch(error){if(form.id==='ax-intake-form')local.intakeError=error.message;local.searching=false;notify(error.message,'error');}finally{button.disabled=false;}
   });
-  return {init,repaint,loadKnowledge,dashboard,caseReview,agentView,knowledgeView,start,actions,extractions,draftsView,documentCheck,factorValue,factorContext,factorLocation};
+  return {init,repaint,loadKnowledge,restoreNavigation,restoreKnowledgeSearch,dashboard,caseReview,agentView,knowledgeView,start,actions,extractions,draftsView,documentCheck,factorValue,factorContext,factorLocation};
 }

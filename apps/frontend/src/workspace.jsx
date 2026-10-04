@@ -1,7 +1,7 @@
 import React from 'react';
 import LegalUpdates from './LegalUpdates.jsx';
 import ApprovalEstimate from './ApprovalEstimate.jsx';
-import CaseDashboard from './CaseDashboard.jsx';
+import CaseDashboard,{dashboardSelectionDescriptor,resolveDashboardSelection} from './CaseDashboard.jsx';
 import CaseLegalReview from './CaseLegalReview.jsx';
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
@@ -57,5 +57,5 @@ export function renderOffice(props){
   flushSync(()=>rootFor(document.querySelector('#app')).render(<OfficeShell {...props}/>));
   document.querySelectorAll('[data-case-automation]').forEach(node=>{const root=createRoot(node);pipelineRoots.push(root);flushSync(()=>root.render(<CaseAutomation caseData={props.state.current}/>));});
   document.querySelectorAll('[data-case-legal-review]').forEach(node=>{const root=createRoot(node);pipelineRoots.push(root);flushSync(()=>root.render(<CaseLegalReview caseData={props.state.current} role={props.user.role}/>));});
-  document.querySelectorAll('[data-case-dashboard]').forEach(node=>{const root=createRoot(node);pipelineRoots.push(root);flushSync(()=>root.render(<CaseDashboard caseData={props.state.current} initialSelection={props.state.dashboardSelection?.caseId===props.state.current?.id?props.state.dashboardSelection.value:null} onSelection={value=>{props.state.dashboardSelection={caseId:props.state.current.id,value};}}/>));});
+  document.querySelectorAll('[data-case-dashboard]').forEach(node=>{const root=createRoot(node);pipelineRoots.push(root);const c=props.state.current;const selection='dashboardRouteDetail' in props.state?resolveDashboardSelection(c,props.state.dashboardRouteDetail):(props.state.dashboardSelection?.caseId===c?.id?props.state.dashboardSelection.value:null);flushSync(()=>root.render(<CaseDashboard caseData={c} initialSelection={selection} onSelection={value=>{props.state.dashboardSelection={caseId:c.id,value};window.dispatchEvent(new CustomEvent('office:dashboard-detail',{detail:{selection:dashboardSelectionDescriptor(c,value)}}));}}/>));});
 }
