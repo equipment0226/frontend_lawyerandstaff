@@ -1,4 +1,4 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {date,icon,list} from '../../shared/ui.js';
 import {humanText} from '../../shared/structured.js';
 import ApprovalEstimate from './ApprovalEstimate.jsx';
@@ -33,6 +33,44 @@ function pipelineView(p){
   return {steps,active,running,queued,waiting,
     detail:queued?text(p.summary):waiting?(text(reason)||text(active?.detail)||text(p.summary)):text(active?.detail||p.summary),
     progress:coverage||p.progress};
+}
+
+// The legacy workspace remounts this view on refresh. Keep only visual timing
+// and aggregate progress in bounded memory so polling does not replay a finish
+// or reset the current stage's animation. Nothing is stored in browser history.
+const pipelineMotionMemory=new Map();
+function usePipelineMotion(root,identity,states,progressKey,ratio){
+  useLayoutEffect(()=>{
+    const node=root.current;if(!node)return;
+    const now=performance.now(),preference=matchMedia('(prefers-reduced-motion: reduce)');
+    const previous=pipelineMotionMemory.get(identity),steps=JSON.parse(states),finished={...previous?.finished},animations=[];
+    const synchronize=()=>{
+      const clock=performance.now();
+      for(const [name,duration] of [['pulse',2400],['orbit',2800],['flow',1800]])node.style.setProperty(`--cd-${name}-delay`,`${-(clock%duration)}ms`);
+      if(preference.matches){animations.forEach(animation=>animation.cancel());node.querySelectorAll('[data-step-celebrate]').forEach(step=>step.removeAttribute('data-step-celebrate'));}
+    };
+    synchronize();
+    for(const step of node.querySelectorAll('[data-step-id]')){
+      const id=step.dataset.stepId,status=steps[id];
+      if(status==='completed'&&previous?.steps[id]&&previous.steps[id]!=='completed')finished[id]=now;
+      if(status!=='completed')delete finished[id];
+      const elapsed=now-finished[id];
+      if(!preference.matches&&elapsed>=0&&elapsed<650){step.dataset.stepCelebrate='true';step.style.setProperty('--cd-complete-delay',`${-elapsed}ms`);}
+      else step.removeAttribute('data-step-celebrate');
+    }
+    let transition=previous?.progressKey===progressKey?previous?.transition:null;
+    if(previous?.progressKey===progressKey&&previous.ratio!==ratio)transition={from:previous.ratio,to:ratio,started:now};
+    const fill=node.querySelector('.cd-progress-fill'),elapsed=transition?now-transition.started:650;
+    if(fill?.animate&&!preference.matches&&transition&&elapsed<650){
+      const animation=fill.animate([{width:`${transition.from}%`},{width:`${transition.to}%`}],{duration:650,easing:'cubic-bezier(.22,1,.36,1)'});
+      animation.id='cd-progress-change';animation.currentTime=Math.max(0,elapsed);animations.push(animation);
+    }
+    pipelineMotionMemory.delete(identity);
+    pipelineMotionMemory.set(identity,{steps,finished,progressKey,ratio,transition:elapsed<650?transition:null});
+    while(pipelineMotionMemory.size>24)pipelineMotionMemory.delete(pipelineMotionMemory.keys().next().value);
+    preference.addEventListener('change',synchronize);
+    return()=>{preference.removeEventListener('change',synchronize);animations.forEach(animation=>animation.cancel());};
+  },[root,identity,states,progressKey,ratio]);
 }
 function Icon({name}){return <span className="cd-icon" aria-hidden="true" dangerouslySetInnerHTML={{__html:icon(name)}}/>;}
 function LinkButton({tab,children,...props}){return <button className="cd-link" data-tab={target(tab)} {...props}>{children}<Icon name="arrow"/></button>;}
@@ -94,10 +132,14 @@ export default function CaseDashboard({caseData:c,initialSelection,onSelection})
   const actions=list(a.actions),selectedActions=actions.filter(action=>action.category===category),matches=list(a.knowledge?.matches),cases=matches.filter(match=>match.kind==='case');
   const references=(cases.length?cases:matches).slice(0,3),documents=list(c.documents).filter(doc=>!['superseded','quarantined','rejected'].includes(doc.status)),verified=number(m.documents?.verified)??documents.filter(doc=>doc.status==='verified').length,documentTotal=number(m.documents?.total)??documents.length;
   const totalRules=count(rules.met)+count(rules.unmet)+count(rules.unknown),progress=view.progress,progressTotal=count(progress?.total),progressDone=Math.min(progressTotal,count(progress?.completed));
+  const liveStep=!pendingConsultation&&running&&view.active?.status!=='completed'?view.active?.id:null;
+  const displaySteps=steps.map((step,index)=>({...step,motionId:String(step.id||index),live:step.id===liveStep&&step.status!=='completed',status:step.id===liveStep&&step.status!=='completed'?'running':step.status==='running'?'waiting':step.status||'waiting'}));
+  const motionRoot=useRef(null),progressRatio=progressTotal>0?progressDone/progressTotal*100:0;
+  usePipelineMotion(motionRoot,`${c.id}:${c.input_revision}`,JSON.stringify(Object.fromEntries(displaySteps.map(step=>[step.motionId,step.status]))),`${view.active?.id}:${progress?.label}:${progressTotal}`,progressRatio);
   const currentDrafts=list(c.court_documents).filter(doc=>!doc.stale&&doc.status!=='superseded');
-  return <div className="case-dashboard" data-react-component="CaseDashboard">
-    <section className="cd-hero" aria-label="현재 단계와 다음 업무"><div className="cd-hero-main"><div className="cd-hero-kicker"><span className={`cd-live-dot ${running?'active':''}`}/>{running?'지금 진행 중':'현재 진행 단계'}<span className="cd-phase">{phase}</span></div><h2>{next.title}</h2><p data-pipeline-detail role="status">{heroDetail}</p><div className="cd-hero-actions"><button className="cd-primary" data-tab={next.tab}>{next.label}<Icon name="arrow"/></button><button className="cd-hero-link" data-tab="messages"><Icon name="message"/>고객 연락</button></div></div><div className="cd-hero-status"><span>진행 기록</span><strong>{done}<small> / {steps.length||8}</small></strong><p>업무 단계 완료</p><div className="cd-step-dots" aria-label={`${done}개 단계 완료`}>{(steps.length?steps:Array.from({length:8},()=>({}))).map((step,index)=><span key={index} className={step.status==='completed'?'complete':step.status==='running'?'active':''}/>)}</div>{progressTotal>0&&<div className="cd-mini-progress"><span>{text(progress.label)||'원문 대조'}</span><b>{progressDone} / {progressTotal}</b><progress value={progressDone} max={progressTotal}/></div>}{p.queued_update?.status==='queued'&&<small className="cd-queue-note">새 자료 반영 대기</small>}</div></section>
-    <div className="cd-process"><div className="cd-process-head"><span>진행 순서 · 단계를 눌러 해당 업무로 이동하세요.</span>{!pendingConsultation&&<button className="cd-link" data-action="automation-run" disabled={running||p.queued_update?.status==='queued'||p.status==='queued'}><Icon name="refresh"/>다시 확인</button>}</div><ol className="cd-stepper" aria-label="사건 진행 순서">{steps.map((step,index)=><li key={step.id||index} data-step-status={step.status||'waiting'}><button aria-current={!pendingConsultation&&view.active?.id===step.id?'step':undefined} data-tab={pendingConsultation?'consultation':stepTab[step.id]||'overview'}><span className="cd-step-index">{step.status==='completed'?<Icon name="check"/>:index+1}</span><strong>{text(step.title||step.label)||'진행 단계'}</strong><small>{!pendingConsultation&&view.active?.id===step.id&&step.status==='waiting'?'현재 · 대기':stepState[step.status]||'대기'}</small></button></li>)}</ol></div>
+  return <div ref={motionRoot} className="case-dashboard" data-react-component="CaseDashboard" data-pipeline-motion={liveStep?'running':view.queued?'queued':view.waiting?'waiting':'idle'}>
+    <section className="cd-hero" aria-label="현재 단계와 다음 업무"><div className="cd-hero-main"><div className="cd-hero-kicker"><span className={`cd-live-dot ${liveStep?'active':''}`}/>{running?'지금 진행 중':'현재 진행 단계'}<span className="cd-phase">{phase}</span></div><h2>{next.title}</h2><p data-pipeline-detail role="status">{heroDetail}</p><div className="cd-hero-actions"><button className="cd-primary" data-tab={next.tab}>{next.label}<Icon name="arrow"/></button><button className="cd-hero-link" data-tab="messages"><Icon name="message"/>고객 연락</button></div></div><div className="cd-hero-status"><span>진행 기록</span><strong>{done}<small> / {steps.length||8}</small></strong><p>업무 단계 완료</p><div className="cd-step-dots" aria-label={`${done}개 단계 완료`}>{displaySteps.map((step,index)=><span key={step.id||index} className={step.status==='completed'?'complete':step.live?'active':''}/>)}</div>{progressTotal>0&&<div className="cd-mini-progress"><span>{text(progress.label)||'원문 대조'}</span><b>{progressDone} / {progressTotal}</b><div className="cd-progress-track" role="progressbar" aria-label={text(progress.label)||'원문 대조'} aria-valuemin={0} aria-valuenow={progressDone} aria-valuemax={progressTotal}><span className="cd-progress-fill" style={{width:`${progressRatio}%`}}/></div></div>}{p.queued_update?.status==='queued'&&<small className="cd-queue-note">새 자료 반영 대기</small>}</div></section>
+    <div className="cd-process"><div className="cd-process-head"><span>진행 순서 · 단계를 눌러 해당 업무로 이동하세요.</span>{!pendingConsultation&&<button className="cd-link" data-action="automation-run" disabled={running||p.queued_update?.status==='queued'||p.status==='queued'}><Icon name="refresh"/>다시 확인</button>}</div><ol className="cd-stepper" aria-label="사건 진행 순서">{displaySteps.map((step,index)=><li key={step.motionId} data-step-id={step.motionId} data-step-status={step.status} data-step-live={step.live?'true':undefined} data-link-state={displaySteps[index+1]?.live?'running':step.status==='completed'&&displaySteps[index+1]?.status==='completed'?'completed':'waiting'}><button aria-current={!pendingConsultation&&view.active?.id===step.id?'step':undefined} data-tab={pendingConsultation?'consultation':stepTab[step.id]||'overview'}><span className="cd-step-index">{step.status==='completed'?<Icon name="check"/>:index+1}</span><strong>{text(step.title||step.label)||'진행 단계'}</strong><small>{!pendingConsultation&&view.active?.id===step.id&&step.status==='waiting'?(view.queued?'시작 대기':'현재 · 대기'):stepState[step.status]||'대기'}</small></button></li>)}</ol></div>
     <div className="cd-section-heading"><div><span className="cd-overline">사건의 현재 모습</span><h2>숫자와 근거를 함께 확인하세요.</h2></div><span className="cd-hint"><Icon name="info"/>지표를 누르면 상세 내용을 볼 수 있습니다.</span></div>
     <section className="cd-metrics" aria-label="사건 검토 지표">
       <button className="cd-metric" data-dashboard-metric="source" onClick={()=>choose('source')} aria-haspopup="dialog"><div className="cd-metric-title"><span>자료 추출</span><Icon name="arrow"/></div><div className="cd-metric-body"><Ring value={source.covered} total={source.total} label="서식에 필요한 자료 추출"/><div><strong>{number(source.total)>0?`${count(source.covered)} / ${source.total}`:'확인 대기'}</strong><small>원문에서 추출한 항목</small></div></div><p>{number(source.verified)!==null?`항목 ${source.verified}개 확인 완료 · `:''}서류 {verified} / {documentTotal}건 검토</p></button>

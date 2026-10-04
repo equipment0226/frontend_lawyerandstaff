@@ -1,0 +1,32 @@
+/* Activity follows the actual running step. Waiting is intentionally still. */
+.cd-stepper button{padding:6px 2px 8px;border-radius:11px;transition:background-color .3s ease,color .3s ease}
+.cd-stepper .cd-step-index{position:relative;width:30px;height:30px;transition:background-color .3s ease,border-color .3s ease,color .3s ease}
+.cd-stepper li:not(:last-child)::after{top:21px;left:calc(50% + 23px);right:calc(-50% + 16px);height:2px;border-radius:2px;background:#dfe6d7}
+.cd-stepper li[data-link-state="completed"]::after{background:linear-gradient(90deg,#89a477,#b7caa6)}
+.cd-stepper li[data-link-state="running"]::after{background-color:#dfe6d7;background-image:linear-gradient(90deg,transparent,#709468,transparent);background-size:55% 100%;background-repeat:no-repeat;animation:cd-step-flow 1800ms ease-in-out infinite;animation-delay:var(--cd-flow-delay,0ms)}
+.cd-stepper [data-step-live="true"] button{background:linear-gradient(180deg,#e6edde88,#f0f5e8aa);box-shadow:inset 0 0 0 1px #9ab28a24}
+.cd-stepper [data-step-live="true"] .cd-step-index{box-shadow:0 0 0 4px #e1ead9;background:#3e6b51;border-color:#3e6b51}
+.cd-stepper [data-step-live="true"] .cd-step-index::before,.cd-stepper [data-step-live="true"] .cd-step-index::after{content:"";position:absolute;pointer-events:none;border-radius:50%}
+.cd-stepper [data-step-live="true"] .cd-step-index::before{inset:-8px;border:1px solid #7f9d6c;animation:cd-step-pulse 2400ms ease-out infinite;animation-delay:var(--cd-pulse-delay,0ms)}
+.cd-stepper [data-step-live="true"] .cd-step-index::after{inset:-5px;border:1.5px solid transparent;border-top-color:#738e5d;border-right-color:#b4c49b;animation:cd-step-orbit 2800ms linear infinite;animation-delay:var(--cd-orbit-delay,0ms)}
+.cd-stepper [data-step-live="true"] small{color:#4e7343}
+.cd-stepper [data-step-celebrate="true"] .cd-step-index{animation:cd-step-finish 650ms cubic-bezier(.22,1,.36,1) backwards;animation-delay:var(--cd-complete-delay,0ms)}
+.cd-stepper button:focus-visible{outline:2px solid #8fa674;outline-offset:3px}
+.cd-step-dots>span{position:relative;overflow:hidden;transition:background-color .3s ease}
+.case-dashboard[data-pipeline-motion="running"] .cd-live-dot.active{animation:cd-phase-pulse 2400ms ease-out infinite;animation-delay:var(--cd-pulse-delay,0ms)}
+.case-dashboard[data-pipeline-motion="running"] .cd-step-dots .active::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#ffffffc9,transparent);animation:cd-progress-sheen 1800ms ease-in-out infinite;animation-delay:var(--cd-flow-delay,0ms)}
+.cd-progress-track{width:100%;height:5px;overflow:hidden;border-radius:8px;background:#aac3b12b;margin-top:4px}
+.cd-progress-fill{position:relative;display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#91b298,#d4deb3);overflow:hidden}
+.case-dashboard[data-pipeline-motion="running"] .cd-progress-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#ffffffe0,transparent);animation:cd-progress-sheen 1800ms ease-in-out infinite;animation-delay:var(--cd-flow-delay,0ms)}
+.cd-mini-progress>b{font-variant-numeric:tabular-nums}
+@keyframes cd-step-pulse{0%{transform:scale(.82);opacity:.35}75%,100%{transform:scale(1.15);opacity:0}}
+@keyframes cd-step-orbit{to{transform:rotate(360deg)}}
+@keyframes cd-step-flow{from{background-position:-140% 0}to{background-position:240% 0}}
+@keyframes cd-step-finish{0%{transform:scale(.84);box-shadow:0 0 0 0 #9eb78655}50%{transform:scale(1.1);box-shadow:0 0 0 7px #9eb7861a}100%{transform:scale(1);box-shadow:0 0 0 10px #9eb78600}}
+@keyframes cd-phase-pulse{0%{box-shadow:0 0 0 0 #c5d69b55}75%,100%{box-shadow:0 0 0 7px #c5d69b00}}
+@keyframes cd-progress-sheen{from{transform:translateX(-120%)}to{transform:translateX(120%)}}
+@media(hover:hover) and (pointer:fine){.cd-stepper button:hover{background-color:#e9efdf99}}
+@media(prefers-reduced-motion:reduce){
+  .case-dashboard .cd-stepper *,.case-dashboard .cd-stepper *::before,.case-dashboard .cd-stepper *::after,.case-dashboard .cd-live-dot,.case-dashboard .cd-step-dots>span::after,.case-dashboard .cd-progress-fill::after{animation:none!important;transition:none!important}
+  .cd-stepper [data-step-live="true"] .cd-step-index::before,.cd-stepper [data-step-live="true"] .cd-step-index::after,.cd-step-dots .active::after,.cd-progress-fill::after{display:none}
+}
