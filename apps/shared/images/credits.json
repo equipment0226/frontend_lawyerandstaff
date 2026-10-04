@@ -1,0 +1,48 @@
+{
+  "assets": [
+    {
+      "file": "hopeful-path.jpg",
+      "title": "Pathway of trees during daytime",
+      "photographer": "Johannes Plenio",
+      "source": "https://unsplash.com/photos/pathway-of-trees-during-daytime-P1Iz3unD6Po",
+      "download": "https://images.unsplash.com/photo-1501889088093-90b27410d97e?auto=format&fit=crop&fm=jpg&q=85&w=1800",
+      "license": "Unsplash License",
+      "license_url": "https://unsplash.com/license",
+      "verified_on": "2026-10-03",
+      "usage": "Local customer portal, sign-in background. No remote image requests."
+    },
+    {
+      "file": "quiet-horizon.jpg",
+      "title": "The sun is setting over the horizon of the ocean",
+      "photographer": "Benjamin Chambon",
+      "source": "https://unsplash.com/photos/the-sun-is-setting-over-the-horizon-of-the-ocean-QPInlTAwwLg",
+      "download": "https://unsplash.com/photos/QPInlTAwwLg/download?force=true&w=1400",
+      "license": "Unsplash License",
+      "license_url": "https://unsplash.com/license",
+      "verified_on": "2026-10-03",
+      "usage": "Decorative local photograph in customer and office workspaces; no remote image requests."
+    },
+    {
+      "file": "sunlit-columns.jpg",
+      "title": "Row of marble columns with sunlight and shadows",
+      "photographer": "Khristian Ortiz",
+      "source": "https://unsplash.com/photos/row-of-marble-columns-with-sunlight-and-shadows-8_mURvmweRY",
+      "download": "https://images.unsplash.com/photo-1761416376094-94aa4f0e2933?auto=format&fit=crop&fm=jpg&q=85&w=1400",
+      "license": "Unsplash License",
+      "license_url": "https://unsplash.com/license",
+      "verified_on": "2026-10-03",
+      "usage": "Decorative local photograph in customer and office workspaces; no remote image requests."
+    },
+    {
+      "file": "warm-architecture.jpg",
+      "title": "Sunlight illuminates textured building columns with shadows",
+      "photographer": "Geoffrey Busse",
+      "source": "https://unsplash.com/photos/sunlight-illuminates-textured-building-columns-with-shadows-u6xEkzL8xZQ",
+      "download": "https://images.unsplash.com/photo-1772140921186-90b409199621?auto=format&fit=crop&fm=jpg&q=85&w=1400",
+      "license": "Unsplash License",
+      "license_url": "https://unsplash.com/license",
+      "verified_on": "2026-10-03",
+      "usage": "Decorative local photograph in customer and office workspaces; no remote image requests."
+    }
+  ]
+}

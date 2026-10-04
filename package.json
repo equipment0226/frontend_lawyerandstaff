@@ -1,0 +1,18 @@
+{
+  "name": "debtoff-frontend-lawyerandstaff",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node scripts/serve.mjs",
+    "dev": "npm run build && npm start"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

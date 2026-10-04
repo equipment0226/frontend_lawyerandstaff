@@ -1,0 +1,29 @@
+/* Match the sidebar image card to the actual navigation content width. */
+.premium-office .sidebar-reassurance{margin:38px 0 20px;width:100%;box-sizing:border-box;padding:23px 13px;border-radius:8px;flex-shrink:0}
+.office-notice-summary{margin:0 0 16px}
+.office-notice{border:1px solid var(--line);border-radius:10px;padding:18px;margin-top:12px;background:#fff}
+.office-notice.is-unread{border-color:#b8d3c4;background:#f5faf6}
+.office-notice h3{font-size:15px;margin:12px 0 8px}
+.office-notice .structured-text{margin-bottom:10px;white-space:pre-line}
+.office-notice>.row:last-child{margin-top:13px}
+.legacy-case-views .structured-list,.dialog .structured-list{display:grid;gap:12px;margin:10px 0}
+.legacy-case-views .structured-request,.dialog .structured-request{padding:15px;border:1px solid var(--line);border-radius:9px;background:#f9fbf9}
+.legacy-case-views .structured-request dl,.dialog .structured-request dl{display:grid;grid-template-columns:90px minmax(0,1fr);gap:7px 13px;margin-bottom:0;font-size:13px}
+.legacy-case-views .structured-request dd,.dialog .structured-request dd{margin:0;overflow-wrap:anywhere}
+.legacy-case-views .structured-request dt,.dialog .structured-request dt{color:var(--muted)}
+.legacy-case-views .structured-text,.dialog .structured-text{white-space:pre-line;overflow-wrap:anywhere}
+@media(max-width:700px){.office-notice{padding:14px}.office-notice>.row:last-child .button{flex:1}.legacy-case-views .structured-request dl,.dialog .structured-request dl{grid-template-columns:75px minmax(0,1fr)}}
+.consultation-application {margin-bottom:20px}
+.consultation-original {white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8;margin:16px 0;color:var(--ink)}
+.consultation-request-action {gap:16px;padding-top:12px;border-top:1px solid var(--line)}
+.consultation-request-action p {flex:1;min-width:200px}
+.consultation-guidance {margin-bottom:20px}
+.consultation-fields {border:0;margin:0;padding:0;min-width:0}
+.consultation-fields:disabled {opacity:.6}
+.consultation-save-guide {margin-top:18px;line-height:1.7}
+.consultation-replies {margin-top:20px;padding:18px;background:var(--surface-soft,#f6f8f7);border-radius:10px}
+.consultation-replies article+article {margin-top:14px;border-top:1px solid var(--line)}
+.consultation-import {padding:20px;margin-bottom:20px}
+.consultation-import>summary {cursor:pointer;font-weight:650;line-height:1.7}
+.consultation-import>p {margin:16px 0;line-height:1.7}
+.consultation-import .ax-intake {box-shadow:none;margin-bottom:0}
