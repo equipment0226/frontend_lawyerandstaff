@@ -1,4 +1,4 @@
-import {esc,list,badge} from './ui.js';
+import {esc,list,badge,readableText} from './ui.js';
 
 export const requestClosed = request => Boolean(request.no_longer_required)||['fulfilled','withdrawn','cancelled','superseded'].includes(request.status);
 export const requestWithdrawn = request => Boolean(request.no_longer_required)||['withdrawn','cancelled','superseded'].includes(request.status);
@@ -22,10 +22,14 @@ export function requestScope(request){
 export function requestOptions(request){
   const options=request.issuance_options||request.issue_options;
   if(!options)return '';
-  if(Array.isArray(options))return options.map(x=>typeof x==='string'?x:x.label||x.description||x.value).filter(Boolean).join(' · ');
-  if(typeof options==='string')return options;
+  if(Array.isArray(options))return options.map(x=>typeof x==='string'?x:x.label||x.description||x.value).filter(Boolean).map(readableText).join(' · ');
+  if(typeof options==='string')return readableText(options);
   const names={detail:'상세',history:'변동 이력',resident_number:'주민등록번호 표시',person_number_display:'주민등록번호 표시',address_history:'주소 변동',include_closed:'해지 계좌 포함',all_pages:'전체 쪽',issued_within_days:'발급 유효기간(일)',freshness_months:'최근 발급(개월)',certificate_type:'증명서 종류',disclosure:'표시 범위',employer_signature:'사업주 확인',breakdown:'상세 내역',content:'포함 내용',name_changes:'이름 변경',resident_number_changes:'주민등록번호 변경',tax_scope:'세목 범위',jurisdiction_scope:'조회 관할'};
-  return Object.entries(options).map(([key,value])=>`${names[key]||key}: ${typeof value==='boolean'?(value?'포함':'제외'):Array.isArray(value)?value.join(', '):String(value)}`).join(' · ');
+  return Object.entries(options).map(([key,value])=>{
+    const text=typeof value==='boolean'?(value?'포함':'제외'):Array.isArray(value)?value.join(', '):String(value);
+    if(key==='freshness_exception'||key==='freshness_exection')return readableText(text);
+    return `${names[key]||key}: ${text}`;
+  }).join(' · ');
 }
 export function requestFeedback(request){
   const details=request.validation||request.validation_result||{};

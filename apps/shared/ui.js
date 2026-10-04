@@ -25,6 +25,8 @@ export function readableText(value) {
     .replace(/\bcase-[A-Za-z0-9_-]+\b/g,'사건 기록')
     .replace(/\b(?:local-grounded-statement|private-verification|legal-watch|legal-overlay)[-:_][A-Za-z0-9_.:-]+\b/g,'현재 기준')
     .replace(/\b(?:undefined|null)\b/g,'미확인')
+    .replace(/\bfreshness_(?:exception|exection)\s*:\s*/gi,'')
+    .replace(/특별한 사정이 있는 경우 예외 검토/g,'특별 사정이 있으면 예외 검토')
     .replace(/\bAI\s+AI\b/g,'AI');
 }
 export function legalBasisLabel(value={}) {
