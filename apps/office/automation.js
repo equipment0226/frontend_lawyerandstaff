@@ -3,7 +3,7 @@ import {consultationPending} from './consultation.js';
 import {api,session} from '/shared/api.js';
 import {esc,date,list,badge,icon,empty,modal,notify,fields,caseReference} from '/shared/ui.js';
 import {structuredHtml,humanText} from '/shared/structured.js';
-import {requestStatus,requestDetails,requestWithdrawn} from '/shared/requests.js';
+import {requestStatus,requestDetails,requestWithdrawn,requestScope} from '/shared/requests.js';
 
 const stageNames={collecting:'서류 준비·보완',ocr_verification:'추출값 검증',verification_waiting:'검증 재시도 필요',legal_analysis:'쟁점·계산 분석',lawyer_review:'변호사 검토 필요',drafting:'문서 작성',completed:'문서 준비 완료'};
 const outcomeNames={approved:'법원 승인·인가',correction:'보정 요구',rejected:'불인가·기각·반려'};
@@ -36,8 +36,8 @@ export function createAutomationUI({getState,render,load,openCase,openForm}){
   }
   function requests(){
     const requests=list(current()?.requests),active=requests.filter(r=>!requestWithdrawn(r)),withdrawn=requests.filter(requestWithdrawn);
-    const item=r=>`<div class="list-item"><div class="row between wrap"><strong class="small">${esc(r.title)}</strong>${requestStatus(r)}</div>${requestDetails(r)}<p>${esc(r.reason)}</p>${!requestWithdrawn(r)?`<button class="button subtle small" data-action="automation-withdraw" data-id="${esc(r.id)}">불필요한 요청 철회</button>`:''}${list(r.source_refs||r.sources).length?`<details class="ax-source-details"><summary>요청 근거</summary>${list(r.source_refs||r.sources).map(s=>`<p class="small">${safeLink(s)||esc(s.title||s.source_id||s)}${s.locator?' · '+esc(s.locator):''}</p>`).join('')}</details>`:''}</div>`;
-    return active.map(item).join('')+(withdrawn.length?`<details class="ax-source-details"><summary>철회·변경된 요청 ${withdrawn.length}건</summary>${withdrawn.map(item).join('')}</details>`:'')||empty('요청한 자료가 없습니다');
+    const item=r=>`<div class="list-item"><div class="row between wrap"><strong class="small">${esc(r.title)}</strong>${requestStatus(r)}</div>${requestDetails(r)}<p>${esc(r.reason)}</p>${r.withdrawn_at?`<p class="small muted">목록에서 제외 · ${date(r.withdrawn_at,true)}</p>`:''}${!requestWithdrawn(r)&&['staff','lawyer'].includes(session.user?.role)?`<button class="button subtle small" data-action="automation-withdraw" data-id="${esc(r.id)}">목록에서 제외</button>`:''}${list(r.source_refs||r.sources).length?`<details class="ax-source-details"><summary>요청 근거</summary>${list(r.source_refs||r.sources).map(s=>`<p class="small">${safeLink(s)||esc(s.title||s.source_id||s)}${s.locator?' · '+esc(s.locator):''}</p>`).join('')}</details>`:''}</div>`;
+    return active.map(item).join('')+(withdrawn.length?`<details class="ax-source-details" data-excluded-requests><summary>제외·변경된 요청 ${withdrawn.length}건</summary>${withdrawn.map(item).join('')}</details>`:'')||empty('요청한 자료가 없습니다');
   }
   function outcomes(){
     const c=current(),items=list(c?.court_outcomes);
@@ -81,7 +81,17 @@ export function createAutomationUI({getState,render,load,openCase,openForm}){
         await api(path('/documents/'+encodeURIComponent(d.id)+'/metadata'),{method:'POST',body:{metadata,reason:body.reason,expected_version:body.expected_version}});notify('서류 발급정보의 정정 이력을 저장했습니다.');await load();
       });
     },
-    'automation-withdraw':d=>openForm('불필요한 자료 요청 철회',fields([['reason','철회 이유와 대체 자료','textarea','',true]]),'요청 철회 기록',async body=>{await api(path('/requests/'+encodeURIComponent(d.id)+'/withdraw'),{method:'POST',body});notify('고객의 요청 목록에서 철회하고 이력을 보관했습니다.');await load();}),
+    'automation-withdraw':d=>{
+      const c=current(),request=list(c?.requests).find(row=>row.id===d.id);
+      if(!request||requestWithdrawn(request)||!['staff','lawyer'].includes(session.user?.role))return;
+      const target=`/cases/${encodeURIComponent(c.id)}/requests/${encodeURIComponent(request.id)}/withdraw`;
+      return openForm('제출서류 목록에서 제외',`<div class="request-exclusion-summary"><strong>${esc(request.title)}</strong><p class="request-scope">${esc(requestScope(request)||'이 요청에 지정된 범위')}</p></div><div class="callout neutral"><p>이 요청은 고객의 준비 목록과 미제출 집계에서 빠집니다. 제출된 원본과 처리 이력은 보관하며, 같은 종류라도 기관·계좌·기간이 다른 요청은 유지합니다.</p></div><label class="field"><span>제외 사유 <span class="required">*</span></span><textarea name="reason" required minlength="5" maxlength="1500" placeholder="예: 급여소득자로 확인되어 사업자 자료는 필요하지 않음"></textarea></label><p class="small muted">제외 사유는 고객에게도 안내됩니다. 필요한 자료를 다시 요청하려면 목록 상단의 ‘자료 요청’을 이용하세요.</p>`,'목록에서 제외',async body=>{
+        body.reason=body.reason.trim();
+        if(body.reason.length<5)throw new Error('제외 사유를 5자 이상 입력해 주세요.');
+        await api(target,{method:'POST',body});
+        notify('제출서류 목록에서 제외했습니다. 사유와 기존 자료는 이력에 보관됩니다.');await load();
+      });
+    },
     'automation-alerts':d=>alerts(d.id),
     'automation-read':async d=>{const caseId=d.caseId||current()?.id;if(!caseId)return;const c=current()?.id===caseId?current():await api('/cases/'+encodeURIComponent(caseId));await api('/cases/'+encodeURIComponent(caseId)+'/notifications/'+encodeURIComponent(d.id)+'/read',{method:'POST',body:{expected_version:c.version}});const selected=lastAlertCase;document.querySelector('dialog[open]')?.close();await load();await alerts(selected);},
     'automation-notice-case':async d=>{document.querySelector('dialog[open]')?.close();await openCase(d.caseId,d.tabId||'overview');},

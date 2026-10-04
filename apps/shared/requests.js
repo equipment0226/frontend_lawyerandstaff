@@ -3,7 +3,7 @@ import {esc,list,badge,readableText} from './ui.js';
 export const requestClosed = request => Boolean(request.no_longer_required)||['fulfilled','withdrawn','cancelled','superseded'].includes(request.status);
 export const requestWithdrawn = request => Boolean(request.no_longer_required)||['withdrawn','cancelled','superseded'].includes(request.status);
 export const requestNeedsUpload = request => !requestClosed(request)&&!['received','validating','processing'].includes(request.status);
-export const requestStatus = request => request.no_longer_required?badge('superseded','이전 요청 보관'):badge(request.status,({fulfilled:'확인 완료',received:'제출 확인 중',validating:'제출 확인 중',processing:'제출 확인 중',requested:'제출 필요',missing:'제출 필요',needs_review:'추가 확인',needs_more:'다시 제출 필요',rejected:'다시 제출 필요',withdrawn:'요청 철회',cancelled:'요청 철회',superseded:'새 요청으로 변경'})[request.status]||'확인 필요');
+export const requestStatus = request => request.status==='withdrawn'?badge('withdrawn','제출 제외'):request.no_longer_required?badge('superseded','이전 요청 보관'):badge(request.status,({fulfilled:'확인 완료',received:'제출 확인 중',validating:'제출 확인 중',processing:'제출 확인 중',requested:'제출 필요',missing:'제출 필요',needs_review:'추가 확인',needs_more:'다시 제출 필요',rejected:'다시 제출 필요',cancelled:'요청 철회',superseded:'새 요청으로 변경'})[request.status]||'확인 필요');
 
 // Account identifiers are only shown in masked form, including older requests.
 export function maskedAccount(value){

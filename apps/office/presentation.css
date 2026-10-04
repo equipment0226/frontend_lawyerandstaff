@@ -33,6 +33,7 @@
 .document-review-metrics .metric>span{font-size:13px;color:var(--muted)}
 .document-review-metrics strong{font-size:25px}.document-review-metrics strong small{font-size:13px;font-weight:400}
 .request-detail-history,.document-secondary-review>summary{padding:17px 0;cursor:pointer;line-height:1.7}
+.document-request-actions{width:145px;white-space:nowrap}.request-exclusion-summary{padding:16px 18px;background:#f5f8f5;border:1px solid var(--line);border-radius:10px;margin-bottom:16px}.request-exclusion-summary .request-scope{margin-bottom:0}
 .document-secondary-review>summary{padding:20px;font-weight:600}
 .received-document-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
 .received-document-card{padding:22px;border:1px solid var(--line);border-radius:12px;min-width:0;background:#fff}

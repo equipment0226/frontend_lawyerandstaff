@@ -12,7 +12,7 @@ import {requestWithdrawn,requestNeedsUpload,requestScope,requestOptions,requestF
 
 const stageNames={consultation:'세부 상담',consultation_waiting:'세부 상담 대기',collecting:'서류 준비·보완',extraction:'상담·서류 내용 추출',validation:'제출 자료 검증',ocr_verification:'추출값 검증',verification_waiting:'검증 재시도 필요',legal_analysis:'쟁점·계산 분석',lawyer_review:'변호사 검토 필요',drafting:'1차 문서 자동 작성',document_verification:'AI 문서 검토',human_review:'담당자 보완·승인',submission_ready:'제출 준비',submitted:'법원 제출 기록 완료',completed:'자동 검토 완료'};
 const stepNames={waiting:'대기',running:'진행 중',completed:'완료',blocked:'보완 필요',review_required:'담당자 확인 필요',failed:'재확인 필요'};
-const requestNames={fulfilled:'확인 완료',received:'제출 확인 중',validating:'제출 확인 중',processing:'제출 확인 중',requested:'제출 필요',missing:'제출 필요',needs_review:'추가 확인',needs_more:'다시 제출 필요',rejected:'다시 제출 필요',withdrawn:'요청 철회',cancelled:'요청 철회',superseded:'새 요청으로 변경'};
+const requestNames={fulfilled:'확인 완료',received:'제출 확인 중',validating:'제출 확인 중',processing:'제출 확인 중',requested:'제출 필요',missing:'제출 필요',needs_review:'추가 확인',needs_more:'다시 제출 필요',rejected:'다시 제출 필요',withdrawn:'제출 제외',cancelled:'요청 철회',superseded:'새 요청으로 변경'};
 const roots=new Map();
 let pipelineRoots=[];
 const explanation=value=>humanText(typeof value==='string'?value:value?.message||value?.description||value?.reason||value?.title||'');
