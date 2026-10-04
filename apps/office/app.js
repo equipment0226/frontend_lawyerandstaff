@@ -127,7 +127,7 @@ const actions={
   'page-prev':()=>navigation.navigate({offset:Math.max(0,state.offset-25),query:'',filter:'all'}),
   'page-next':()=>navigation.navigate({offset:state.offset+25,query:'',filter:'all'}),
   menu:()=>document.querySelector('.sidebar').classList.toggle('open'),
-  logout:async()=>{navigation.stop();routeController?.abort();state.current=null;state.cases=[];clearWorkspace();await logout();authenticate('office',ready);},
+  logout:async()=>{window.dispatchEvent(new CustomEvent('office:before-navigate',{detail:{}}));navigation.stop();routeController?.abort();state.current=null;state.cases=[];clearWorkspace();await logout();authenticate('office',ready);},
   refresh:async()=>{if(state.view==='system')state.system=await api('/system');if(state.view==='registry')state.registry=await api('/registry');if(state.view==='knowledge')await ax.loadKnowledge();await load();},
   'new-case':async()=>{const r=await registry();openForm('새 사건 등록',fields([['client_name','의뢰인 이름','text','',true]])+`<label class="field"><span>검토할 법원</span><select name="court_id" required>${list(r.courts).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label>`+fields([['summary','상담 요약','textarea','',true]])+'<label class="row small"><input name="consent" type="checkbox" required> 의뢰인의 사건 기록 작성 동의를 확인했습니다.</label>','사건 등록',async body=>{const c=await api('/cases',{method:'POST',body:{client_name:body.client_name,court_id:body.court_id,summary:body.summary,consent:true}});await load();await openCase((c.case||c).id);notify('사건을 등록했습니다.');});},
   upload:()=>openBatchUpload({caseData:state.current,role:'staff',isCurrent:()=>Boolean(session.token)&&session.user?.role!=='client',onComplete:async updated=>{state.current=updated;await load();}}),

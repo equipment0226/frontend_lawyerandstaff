@@ -1,0 +1,55 @@
+/* Quiet movement, shared by the customer and professional workspaces. */
+:root{--motion-ease:cubic-bezier(.16,1,.3,1);--motion-accent:#547a62;--motion-sand:#d5c39b}
+html[data-motion-navigation]::before{content:"";position:fixed;z-index:190;inset:0 0 auto;height:2px;pointer-events:none;background:linear-gradient(90deg,transparent,#b4cbb4 25%,#6e9176 55%,transparent 90%);background-size:50% 100%;background-repeat:no-repeat;animation:workspace-route-line 1.15s ease-in-out infinite}
+@keyframes workspace-route-line{from{background-position:-110% 0}to{background-position:210% 0}}
+
+/* The first paint has useful visual structure even before JavaScript arrives. */
+.app-boot.loading{position:relative;isolation:isolate;min-height:100svh;display:flex;align-items:center;justify-content:center;flex-direction:column;overflow:hidden;padding:64px 28px;background:#f7f8f2;color:#63745f}
+.app-boot::before,.app-boot::after{content:"";position:absolute;pointer-events:none;z-index:-1;border-radius:50%;filter:blur(12px)}
+.app-boot::before{width:min(800px,85vw);aspect-ratio:1;left:-15%;top:-30%;background:radial-gradient(circle,#dce7dccc,transparent 70%);animation:workspace-ambient 8s ease-in-out infinite alternate}
+.app-boot::after{width:min(780px,90vw);aspect-ratio:1;right:-20%;bottom:-35%;background:radial-gradient(circle,#ebe3cfbb,transparent 70%);animation:workspace-ambient 9s ease-in-out infinite alternate-reverse}
+.boot-signature{display:flex;align-items:center;gap:14px;margin-bottom:27px;color:#34513e}
+.boot-monogram{display:grid;place-items:center;position:relative;width:52px;height:52px;border:1px solid #cbd8c8;border-radius:17px;background:#ffffffe0;box-shadow:0 5px 22px #344f3d09}
+.boot-monogram::before{content:"";position:absolute;inset:-6px;border:1px solid transparent;border-top-color:#8da389;border-right-color:#b8b895;border-radius:22px;animation:workspace-orbit 3s linear infinite}
+.boot-monogram svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.7}
+.boot-wordmark{text-align:left}.boot-wordmark strong{font-size:24px;font-weight:550;letter-spacing:-1.1px;display:block;line-height:1.4}.boot-wordmark small{font-size:9px;letter-spacing:2.3px;color:#97a28d;display:block;margin-top:3px}
+.app-boot>p{font-size:13px;line-height:1.8;letter-spacing:-.2px;margin:0;color:#7e8a73}.boot-progress{width:90px;height:2px;overflow:hidden;background:#e3e8da;margin:22px 0 42px;border-radius:4px}.boot-progress::after{content:"";display:block;width:45%;height:100%;background:#a1b291;animation:workspace-boot-progress 1.8s ease-in-out infinite}
+.boot-preview{display:grid;grid-template-columns:1.35fr 1fr;gap:17px;width:min(680px,100%);opacity:.74}.boot-preview-card{border:1px solid #e3e8dc;background:#ffffff9e;border-radius:15px;padding:24px;text-align:left;box-shadow:0 12px 40px #53634904}.boot-preview-card>i{display:block;height:7px;width:69%;background:#e8ecdf;border-radius:4px;margin:14px 0;position:relative;overflow:hidden}.boot-preview-card>i:first-child{height:9px;width:40%;margin-top:0;background:#dde5d5}.boot-preview-card>i:last-child{width:48%;margin-bottom:0}.boot-preview-card>i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#ffffffb3,transparent);translate:-100% 0;animation:workspace-sheen 2s ease-in-out infinite}.boot-preview-card:nth-child(2) i::after{animation-delay:.2s}
+@keyframes workspace-ambient{to{translate:3% 4%;scale:1.06}}
+@keyframes workspace-orbit{to{rotate:360deg}}
+@keyframes workspace-boot-progress{from{translate:-110% 0}to{translate:330% 0}}
+@keyframes workspace-sheen{to{translate:110% 0}}
+
+.loading:not(.app-boot){position:relative;background:linear-gradient(130deg,#f7f9f4,#fffef9);border:1px solid #e4e9dc;border-radius:16px;margin:15px 0;min-height:245px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:40px 24px}
+.loading:not(.app-boot)::after{content:"";display:block;width:min(320px,80%);height:44px;margin-top:20px;border-radius:5px;background:linear-gradient(90deg,transparent,#ffffffd4,transparent),linear-gradient(#e7ecdf,#e7ecdf) left top/72% 7px no-repeat,linear-gradient(#edf0e8,#edf0e8) left 18px/100% 7px no-repeat,linear-gradient(#edf0e8,#edf0e8) left 36px/56% 7px no-repeat;background-size:45% 100%,72% 7px,100% 7px,56% 7px;background-repeat:no-repeat;animation:workspace-placeholder 2s ease-in-out infinite}
+@keyframes workspace-placeholder{from{background-position:-120% 0,left top,left 18px,left 36px}to{background-position:220% 0,left top,left 18px,left 36px}}
+.loading .spinner{border-width:1.5px;border-color:#dfe6d9;border-top-color:#819b75;width:29px;height:29px;margin-bottom:8px}
+
+/* Only actionable surfaces lift; information cards stay steady under the cursor. */
+:is(.button,.public-button,.icon-button,.nav-link,.cd-metric,.cd-quick,.cd-reference,.cd-action-item){transition:background-color .22s ease,border-color .22s ease,box-shadow .28s ease,color .2s ease,translate .3s var(--motion-ease)}
+:is(.tabs,.tab-bar,.private-workspace-tabs,.public-navigation,.public-nav,.portal-nav,.faq-categories) button{transition:color .22s ease,background-color .22s ease,border-color .22s ease,box-shadow .22s ease}
+.nav-link.active{box-shadow:inset 2px 0 #bfd2a7,0 3px 14px #17362712}
+:is(.tabs,.tab-bar,.private-workspace-tabs,.portal-nav) button[aria-selected="true"]{box-shadow:0 3px 10px #425e3406}
+:is(.button,.public-button,.icon-button,.nav-link,.cd-metric,.cd-quick,.cd-reference,.cd-action-item):focus-visible{outline:2px solid #8ea47a;outline-offset:4px;box-shadow:0 0 0 5px #91a47b14}
+:is(input,textarea,select){transition:border-color .2s ease,box-shadow .2s ease,background-color .2s ease}
+:is(input,textarea,select):focus{box-shadow:0 0 0 3px #97ac8512}
+:is(.button,.public-button)[aria-busy="true"]{background-image:linear-gradient(110deg,transparent 25%,#ffffff14 48%,transparent 72%);background-size:210% 100%;animation:workspace-button-busy 1.6s ease-in-out infinite}
+@keyframes workspace-button-busy{to{background-position:210% 0}}
+.automation-work-progress progress{accent-color:#759268;border-radius:8px;overflow:hidden}
+.automation-work-progress progress::-webkit-progress-bar{background:#e8edde;border-radius:8px}
+.automation-work-progress progress::-webkit-progress-value{background:linear-gradient(90deg,#92a87b,#527b61);border-radius:8px;transition:width .65s var(--motion-ease)}
+.automation-work-progress progress::-moz-progress-bar{background:linear-gradient(90deg,#92a87b,#527b61);border-radius:8px}
+.public-content{animation:none} /* Entrance belongs to the route-aware observer. */
+@media(hover:hover) and (pointer:fine){
+  :is(.button,.public-button):not(:disabled):hover{translate:0 -1px;box-shadow:0 6px 18px #284a3514}
+  :is(.cd-metric,.cd-quick,.cd-reference,.cd-action-item):not(:disabled):hover{translate:0 -2px;box-shadow:0 8px 22px #3a5b350a}
+  :is(.button,.public-button,.cd-metric,.cd-quick):not(:disabled):active{translate:0 0;box-shadow:0 2px 7px #284a350c}
+}
+@media(max-width:600px){.app-boot.loading{padding:44px 24px}.boot-preview{gap:12px;grid-template-columns:1fr}.boot-preview-card{padding:21px}.boot-preview-card:nth-child(2){display:none}.boot-progress{margin-bottom:32px}.boot-wordmark strong{font-size:22px}.loading:not(.app-boot){min-height:210px}}
+@media(prefers-reduced-motion:reduce){
+  html[data-motion-navigation]::before{display:none}
+  .app-boot::before,.app-boot::after,.boot-monogram::before,.boot-progress::after,.boot-preview-card>i::after,.loading::after,[aria-busy="true"]{animation:none!important}
+  :is(.button,.public-button,.icon-button,.nav-link,.cd-metric,.cd-quick,.cd-reference,.cd-action-item,input,textarea,select),:is(.tabs,.tab-bar,.private-workspace-tabs,.public-navigation,.public-nav,.portal-nav,.faq-categories) button{transition:none!important;translate:none!important}
+  .automation-work-progress progress::-webkit-progress-value{transition:none}
+}
+@media print{.app-boot,html[data-motion-navigation]::before{display:none!important}}
