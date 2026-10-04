@@ -1,5 +1,5 @@
 import {esc,list,date,badge,icon,empty,modal,notify} from '/shared/ui.js';
-import {api} from '/shared/api.js';
+import {api,session} from '/shared/api.js';
 import {requestWithdrawn,requestScope} from '/shared/requests.js';
 import {structuredHtml} from '/shared/structured.js';
 
@@ -32,6 +32,7 @@ const inactiveDocuments=new Set(['rejected','superseded','quarantined']);
 const candidateNames={accepted:'검토 완료',corrected:'정정 완료',rejected:'반려 이력',superseded:'이전 추출',quarantined:'격리된 항목'};
 const documentNames={verified:'서류 검증 완료',received:'제출됨 · 검토 대기',needs_more:'자료 보완 필요',quarantined:'인물 확인 필요',rejected:'반려 자료',superseded:'이전 제출본'};
 const documentCandidates=(caseData,documentId)=>list(caseData.extraction_candidates).filter(row=>row.document_id===documentId);
+const canLinkRequest=(caseData,doc)=>Boolean(doc&&['staff','lawyer'].includes(session.user?.role)&&!doc.request_id&&!inactiveDocuments.has(doc.status)&&doc.automated_check?.coverage_status!=='identity_conflict'&&!list(caseData.requests).some(request=>list(request.document_ids).includes(doc.id)));
 const currentCandidates=(caseData,documentId)=>documentCandidates(caseData,documentId).filter(row=>!inactiveCandidates.has(row.status));
 const extractionState=doc=>doc.extraction_state||{status:'pending',can_review:false,message:'서류별 추출 완료 여부를 확인하고 있습니다.'};
 function extractionStatus(doc){
@@ -55,11 +56,36 @@ export function documentReviewWorkspace(caseData,{requestsHtml='',documentCheck=
     const candidates=currentCandidates(caseData,doc.id),accepted=candidates.filter(row=>row.status==='accepted'||row.status==='corrected').length;
     const request=activeRequests.find(row=>row.id===doc.request_id||list(row.document_ids).includes(doc.id));
     const statusText=documentNames[doc.status]||'검토 대기';
-    return `<article class="received-document-card" data-received-document="${esc(doc.id)}"><div class="row between wrap"><span class="document-file-symbol">${icon('file')}</span>${badge(doc.status,statusText)}</div><h3>${esc(doc.filename||doc.name||'제출 자료')}</h3><p class="small muted">${esc(request?.title||'별도 제출·참고 자료')} · ${date(doc.created_at||doc.uploaded_at,true)}</p>${extractionStatus(doc)}<div class="document-extraction-count"><strong>추출 항목 ${candidates.length}개</strong><span>${accepted}개 검토 완료${candidates.length-accepted?` · ${candidates.length-accepted}개 확인 필요`:''}</span></div>${doc.status==='quarantined'?'<p class="small muted">사건 당사자와 자료의 인물을 먼저 확인해 주세요.</p>':''}<div class="document-review-actions"><button class="button" data-action="document-extractions" data-id="${esc(doc.id)}">이 서류의 추출내용 보기 ${icon('arrow')}</button><div class="row wrap"><button class="button secondary small" data-action="download-doc" data-id="${esc(doc.id)}">${icon('download')} 원문 다운로드</button><button class="button subtle small" data-action="automation-metadata" data-id="${esc(doc.id)}">기관·기간 정정</button></div></div>${documentCheck(doc)?`<details class="document-check-details"><summary>서류 검증·판독 이력</summary>${documentCheck(doc)}</details>`:''}</article>`;
+    const linkAction=canLinkRequest(caseData,doc)?`<button class="button secondary small" data-action="document-link-request" data-id="${esc(doc.id)}" ${activeRequests.length?'':'disabled title="연결할 자료 요청을 먼저 등록해 주세요."'}>요청에 연결 ${icon('arrow')}</button>`:'';
+    return `<article class="received-document-card" data-received-document="${esc(doc.id)}"><div class="row between wrap"><span class="document-file-symbol">${icon('file')}</span>${badge(doc.status,statusText)}</div><h3>${esc(doc.filename||doc.name||'제출 자료')}</h3><p class="small muted">${esc(request?.title||'별도 제출·참고 자료')} · ${date(doc.created_at||doc.uploaded_at,true)}</p>${extractionStatus(doc)}<div class="document-extraction-count"><strong>추출 항목 ${candidates.length}개</strong><span>${accepted}개 검토 완료${candidates.length-accepted?` · ${candidates.length-accepted}개 확인 필요`:''}</span></div>${linkAction}${doc.status==='quarantined'?'<p class="small muted">사건 당사자와 자료의 인물을 먼저 확인해 주세요.</p>':''}<div class="document-review-actions"><button class="button" data-action="document-extractions" data-id="${esc(doc.id)}">이 서류의 추출내용 보기 ${icon('arrow')}</button><div class="row wrap"><button class="button secondary small" data-action="download-doc" data-id="${esc(doc.id)}">${icon('download')} 원문 다운로드</button><button class="button subtle small" data-action="automation-metadata" data-id="${esc(doc.id)}">기관·기간 정정</button></div></div>${documentCheck(doc)?`<details class="document-check-details"><summary>서류 검증·판독 이력</summary>${documentCheck(doc)}</details>`:''}</article>`;
   }).join('')||empty('아직 받은 서류가 없습니다','고객이 제출하면 이곳에 표시됩니다. 담당자가 직접 추가할 수도 있습니다.')}</div></section>`;
 }
 
 export function createDocumentReview({getState,load,formatValue,formatContext,formatLocation}){
+  async function linkRequest(documentId){
+    const caseData=getState().current,doc=list(caseData?.documents).find(row=>row.id===documentId);
+    if(!canLinkRequest(caseData,doc)){notify('현재 요청에 연결할 수 있는 미분류 원본을 선택해 주세요.','error');return;}
+    const requests=list(caseData.requests).filter(request=>!requestWithdrawn(request)&&!request.no_longer_required);
+    if(!requests.length){notify('연결할 자료 요청을 먼저 등록해 주세요.','error');return;}
+    const dialog=modal('받은 원본을 요청에 연결',`<form data-link-request-form><p class="small"><strong>${esc(doc.filename||doc.name||'제출 자료')}</strong></p><div class="callout neutral"><div><strong>같은 원본을 다시 올릴 필요가 없습니다.</strong><p>현재 받은 파일을 선택한 요청에 연결합니다. 연결 후에도 원문·추출값 검토는 별도로 진행합니다.</p></div></div><label class="field"><span>연결할 요청 서류</span><select name="request_id" required><option value="">종류·기관·기간을 확인하고 선택하세요.</option>${requests.map(request=>`<option value="${esc(request.id)}">${esc(request.title)}${requestScope(request)?' · '+esc(requestScope(request)):''}</option>`).join('')}</select></label><p class="small muted" data-link-request-scope></p><label class="field"><span>연결하는 이유</span><textarea name="reason" required minlength="5" maxlength="1500" placeholder="원문에서 확인한 서류 종류와 요청 범위가 맞는 이유를 적어 주세요."></textarea></label><div class="document-review-error" data-link-request-error role="alert"></div><div class="form-footer"><button class="button secondary" type="button" data-link-request-close>닫기</button><button class="button" type="submit">요청에 연결</button></div></form>`);
+    const form=dialog.querySelector('form'),select=form.querySelector('[name=request_id]'),error=form.querySelector('[data-link-request-error]'),button=form.querySelector('[type=submit]');
+    form.querySelector('[data-link-request-close]').onclick=()=>dialog.close();
+    select.onchange=()=>{const request=requests.find(row=>row.id===select.value);form.querySelector('[data-link-request-scope]').textContent=request?requestScope(request)||'요청 범위를 원문에서 확인해 주세요.':'';form.dataset.dirty='true';};
+    form.addEventListener('input',()=>{form.dataset.dirty='true';});
+    let conflict=false;
+    form.onsubmit=async event=>{
+      event.preventDefault();if(conflict||button.disabled)return;
+      const data=new FormData(form),reason=String(data.get('reason')||'').trim(),requestId=String(data.get('request_id')||'');
+      if(!requests.some(request=>request.id===requestId)||reason.length<5||reason.length>1500){error.textContent='연결할 요청과 5자 이상의 확인 이유를 입력해 주세요.';return;}
+      button.disabled=true;error.textContent='';
+      try{
+        const response=await api(`/cases/${encodeURIComponent(caseData.id)}/documents/${encodeURIComponent(doc.id)}/request`,{method:'POST',body:{request_id:requestId,expected_version:caseData.version,reason}});
+        getState().current=response.case||response;dialog.close();notify('요청에 연결했습니다. 원문과 추출값 검토를 이어가세요.');await load();
+      }catch(failure){conflict=failure.status===409;error.textContent=conflict?'다른 작업으로 사건이나 요청이 변경되었습니다. 입력한 이유를 확인한 뒤 창을 닫고 최신 자료에서 다시 연결해 주세요.':failure.message;}
+      finally{button.disabled=conflict;}
+    };
+    return dialog;
+  }
   async function open(documentId){
     const caseData=getState().current,doc=list(caseData?.documents).find(row=>row.id===documentId);
     if(!doc)return;
@@ -146,5 +172,5 @@ export function createDocumentReview({getState,load,formatValue,formatContext,fo
     }catch(failure){if(dialog.isConnected)dialog.querySelector('[data-original-preview]').textContent='원문 미리보기를 불러오지 못했습니다. 원문 다운로드로 확인해 주세요.';}
     return dialog;
   }
-  return {open};
+  return {open,linkRequest};
 }

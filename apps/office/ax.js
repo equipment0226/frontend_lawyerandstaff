@@ -47,7 +47,8 @@ export function createAX(context){
       const state=getState();let changed=false;
       if(current()&&['case','agent'].includes(state.view)){
         const caseId=current().id;
-        const fresh=await api('/cases/'+encodeURIComponent(caseId));
+        let fresh;
+        try{fresh=await api('/cases/'+encodeURIComponent(caseId));}catch(error){if([403,404].includes(error.status)&&current()?.id===caseId){context.onCaseUnavailable?.(caseId);return;}throw error;}
         if(current()?.id===caseId&&JSON.stringify(current())!==JSON.stringify(fresh)){
           // Keep the version the user started editing; the API must detect a
           // conflicting update instead of silently saving against a newer one.
